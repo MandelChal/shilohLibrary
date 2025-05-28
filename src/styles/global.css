@@ -1,120 +1,137 @@
 :root {
-    --primary-color: #2e7d32;
-    --secondary-color: #81c784;
-    --text-color: #333;
-    --font-family: 'Segoe UI', sans-serif;
-    --background-color: #f9f9f9;
-    --border-radius: 8px;
-  }
-  
-  /* בסיס */
-  html {
-    box-sizing: border-box;
-    scroll-behavior: smooth;
-  }
-  
-  *, *::before, *::after {
-    box-sizing: inherit;
-  }
-  
+  --primary-color: #2e7d32;
+  --secondary-color: #81c784;
+  --text-color: #333;
+  --text-align: right;
+  --font-family: 'Segoe UI', sans-serif;
+  --background-color: #f9f9f9;
+  --border-radius: 8px;
+}
+
+html {
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+  direction: rtl;
+  /* RTL לכל האתר */
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  background-color: var(--background-color);
+  color: var(--text-color);
+  font-size: 16px;
+  line-height: 1.6;
+  direction: rtl;
+  /* RTL גם כאן */
+}
+
+a {
+  text-decoration: none;
+  color: var(--primary-color);
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+h1,
+h2,
+h3 {
+  text-align: center;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.75rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* טופס התחברות */
+.center-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.login-form {
+  background: white;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+label {
+  font-weight: bold;
+  text-align: right;
+  margin-bottom: 4px;
+}
+
+input,
+textarea,
+select {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: var(--border-radius);
+  font-size: 16px;
+  width: 100%;
+  direction: rtl;
+}
+
+/* כפתורים */
+button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  font-size: 18px;
+  width: 100%;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-top: 8px;
+}
+
+button:hover {
+  background-color: #1b5e20;
+}
+
+@media (max-width: 480px) {
   body {
-    margin: 0;
-    padding: 0;
-    font-family: var(--font-family);
-    background-color: var(--background-color);
-    color: var(--text-color);
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: 15px;
   }
-  
-  a {
-    text-decoration: none;
-    color: var(--primary-color);
+
+  h1 {
+    font-size: 1.5rem;
   }
-  
-  img, video {
-    max-width: 100%;
-    height: auto;
-    display: block;
-  }
-  
-  /* טיפוגרפיה */
-  h1 { font-size: 2rem; }
-  h2 { font-size: 1.75rem; }
-  h3 { font-size: 1.5rem; }
-  
-  /* קונטיינר */
-  .container {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 16px;
-  }
-  
-  /* כפתורים */
-  button {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 10px 16px;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  
-  button:hover {
-    background-color: #1b5e20;
-  }
-  
-  /* טופס התחברות */
-  .center-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background-color: #f5f5f5;
-  }
-  
-  .login-form {
-    background: white;
-    padding: 24px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    max-width: 400px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  /* שדות בטופס */
-  input, textarea, select {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: var(--border-radius);
-    font-size: 16px;
-    width: 100%;
-  }
-  
-  label {
-    font-weight: bold;
-  }
-  
-  /* מדיה קווריז */
-  @media (max-width: 480px) {
-    body { font-size: 15px; }
-    h1 { font-size: 1.5rem; }
-  }
-  
-  @media (min-width: 481px) and (max-width: 768px) {
-    body { font-size: 16px; }
-  }
-  
-  @media (min-width: 769px) and (max-width: 1024px) {
-    body { font-size: 17px; }
-  }
-  
-  @media (min-width: 1025px) {
-    body { font-size: 18px; }
-  }
-  
+}
