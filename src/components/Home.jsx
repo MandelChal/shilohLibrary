@@ -1,6 +1,9 @@
 import React, { useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { Link } from 'react-router-dom';
 
+
+ 
 // אירועים לדוגמה
 const events = [
     { date: "2025-05-10", title: "🕯️ ערב לימוד לעילוי נשמת ר' יהושע" },
@@ -39,6 +42,9 @@ function Home() {
         <div style={{ direction: "rtl", fontFamily: "Arial, sans-serif", padding: "20px", color: "#000" }}>
             <h1 style={{ textAlign: "center", marginBottom: "10px" }}>ברוכים הבאים לישיבת שילה 📚</h1>
             <p style={{ textAlign: "center" }}>מקום של תורה, השראה וחיבור</p>
+            <Link to="/admin" className="text-blue-600 underline">
+        Go to User Admin Panel
+</Link> 
 
             {/* סטריפ חדשות */}
             <div style={{
