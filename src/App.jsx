@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { User, Settings, Calendar, LogOut, Trash2 } from "lucide-react";
+import { User, Settings, Calendar, LogOut, Trash2, Book, Search, Heart, MapPin, Filter, ArrowRight, Star, FileText, X, Plus, Edit2, Save, AlertCircle } from "lucide-react";
 
 // Components
 import LoginScreen from './components/LoginScreen';
@@ -49,6 +49,697 @@ if (isFirebaseEnabled) {
   }
 }
 
+// נתוני ספרים לדוגמה
+const initialBooks = [
+  {
+    id: '1',
+    title: 'חומש רש"י',
+    author: 'רש"י',
+    category: 'torah',
+    location: { color: 'כחול', letter: 'א', number: '15' },
+    description: 'פירוש רש"י המפורסם על התורה עם הערות והסברים מקיפים',
+    image: '/api/placeholder/200/250',
+    rating: 4.8,
+    status: 'available'
+  },
+  {
+    id: '2',
+    title: 'משנה ברורה',
+    author: 'החפץ חיים',
+    category: 'halacha',
+    location: { color: 'אדום', letter: 'ב', number: '23' },
+    description: 'פירוש מקיף על שולחן ערוך אורח חיים',
+    image: '/api/placeholder/200/250',
+    rating: 4.9,
+    status: 'borrowed'
+  },
+  {
+    id: '3',
+    title: 'תהילים מפורש',
+    author: 'מלבי"ם',
+    category: 'nevi',
+    location: { color: 'ירוק', letter: 'ג', number: '7' },
+    description: 'פירוש המלבי"ם על ספר תהילים',
+    image: '/api/placeholder/200/250',
+    rating: 4.7,
+    status: 'available'
+  },
+  {
+    id: '4',
+    title: 'בראשית רבה',
+    author: 'חכמי התלמוד',
+    category: 'midrash',
+    location: { color: 'סגול', letter: 'ד', number: '12' },
+    description: 'מדרש רבה על ספר בראשית',
+    image: '/api/placeholder/200/250',
+    rating: 4.6,
+    status: 'maintenance'
+  },
+  {
+    id: '5',
+    title: 'משנה סדר מועד',
+    author: 'תנאים',
+    category: 'talmud',
+    location: { color: 'כתום', letter: 'ה', number: '31' },
+    description: 'משניות סדר מועד עם פירושים',
+    image: '/api/placeholder/200/250',
+    rating: 4.5,
+    status: 'available'
+  },
+  {
+    id: '6',
+    title: 'שו"ת חתם סופר',
+    author: 'החתם סופר',
+    category: 'responsa',
+    location: { color: 'חום', letter: 'ו', number: '45' },
+    description: 'שאלות ותשובות מהחתם סופר',
+    image: '/api/placeholder/200/250',
+    rating: 4.8,
+    status: 'available'
+  }
+];
+
+// קטגוריות ספרים
+const categories = [
+  { id: 'torah', name: 'תנ"ך ותורה', color: 'blue' },
+  { id: 'nevi', name: 'נביאים וכתובים', color: 'green' },
+  { id: 'midrash', name: 'מדרשים', color: 'purple' },
+  { id: 'talmud', name: 'משניות וגמרא', color: 'red' },
+  { id: 'halacha', name: 'הלכה', color: 'yellow' },
+  { id: 'responsa', name: 'שו"ת', color: 'indigo' },
+  { id: 'prayer', name: 'תפילה וחסידות', color: 'pink' },
+  { id: 'thought', name: 'מחשבה ומוסר', color: 'gray' },
+  { id: 'history', name: 'היסטוריה', color: 'orange' }
+];
+
+// פונקציות עזר לספרים
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'available': return 'text-green-600 bg-green-100';
+    case 'borrowed': return 'text-orange-600 bg-orange-100';
+    case 'maintenance': return 'text-red-600 bg-red-100';
+    default: return 'text-gray-600 bg-gray-100';
+  }
+};
+
+const getStatusText = (status) => {
+  switch (status) {
+    case 'available': return 'זמין';
+    case 'borrowed': return 'מושאל';
+    case 'maintenance': return 'תחזוקה';
+    default: return 'לא ידוע';
+  }
+};
+
+const getCategoryColor = (category) => {
+  const cat = categories.find(c => c.id === category);
+  return cat ? cat.color : 'gray';
+};
+
+// קומפוננט עריכת ספר
+const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
+  const [formData, setFormData] = useState(book || {
+    title: '',
+    author: '',
+    category: '',
+    location: { color: '', letter: '', number: '' },
+    description: '',
+    image: '/api/placeholder/200/250',
+    rating: 4.0,
+    status: 'available'
+  });
+
+  const [errors, setErrors] = useState({});
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.title?.trim()) newErrors.title = 'שם הספר נדרש';
+    if (!formData.author?.trim()) newErrors.author = 'שם המחבר נדרש';
+    if (!formData.category) newErrors.category = 'קטגוריה נדרשת';
+    if (!formData.location?.color?.trim()) newErrors.locationColor = 'צבע נדרש';
+    if (!formData.location?.letter?.trim()) newErrors.locationLetter = 'אות נדרשת';
+    if (!formData.location?.number?.trim()) newErrors.locationNumber = 'מספר נדרש';
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (validateForm()) {
+      onSave(formData);
+    }
+  };
+
+  const updateLocation = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      location: {
+        ...prev.location,
+        [field]: value
+      }
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold mb-6 text-right">
+            {isNew ? 'הוספת ספר חדש' : 'עריכת ספר'}
+          </h2>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-right">שם הספר</label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className={`w-full p-2 border rounded text-right ${errors.title ? 'border-red-500' : 'border-gray-300'}`}
+                  placeholder="הכנס שם הספר"
+                />
+                {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-right">שם המחבר</label>
+                <input
+                  type="text"
+                  value={formData.author}
+                  onChange={(e) => setFormData(prev => ({ ...prev, author: e.target.value }))}
+                  className={`w-full p-2 border rounded text-right ${errors.author ? 'border-red-500' : 'border-gray-300'}`}
+                  placeholder="הכנס שם המחבר"
+                />
+                {errors.author && <p className="text-red-500 text-xs mt-1">{errors.author}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2 text-right">קטגוריה</label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  className={`w-full p-2 border rounded text-right ${errors.category ? 'border-red-500' : 'border-gray-300'}`}
+                >
+                  <option value="">בחר קטגוריה</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-right">סטטוס</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                  className="w-full p-2 border border-gray-300 rounded text-right"
+                >
+                  <option value="available">זמין</option>
+                  <option value="borrowed">מושאל</option>
+                  <option value="maintenance">תחזוקה</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">מיקום בספריה</label>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <input
+                    type="text"
+                    value={formData.location?.color || ''}
+                    onChange={(e) => updateLocation('color', e.target.value)}
+                    className={`w-full p-2 border rounded text-right ${errors.locationColor ? 'border-red-500' : 'border-gray-300'}`}
+                    placeholder="צבע"
+                  />
+                  {errors.locationColor && <p className="text-red-500 text-xs mt-1">{errors.locationColor}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={formData.location?.letter || ''}
+                    onChange={(e) => updateLocation('letter', e.target.value)}
+                    className={`w-full p-2 border rounded text-right ${errors.locationLetter ? 'border-red-500' : 'border-gray-300'}`}
+                    placeholder="אות"
+                  />
+                  {errors.locationLetter && <p className="text-red-500 text-xs mt-1">{errors.locationLetter}</p>}
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={formData.location?.number || ''}
+                    onChange={(e) => updateLocation('number', e.target.value)}
+                    className={`w-full p-2 border rounded text-right ${errors.locationNumber ? 'border-red-500' : 'border-gray-300'}`}
+                    placeholder="מספר"
+                  />
+                  {errors.locationNumber && <p className="text-red-500 text-xs mt-1">{errors.locationNumber}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">דירוג</label>
+              <input
+                type="number"
+                min="1"
+                max="5"
+                step="0.1"
+                value={formData.rating}
+                onChange={(e) => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) }))}
+                className="w-full p-2 border border-gray-300 rounded text-right"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">תיאור</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                className="w-full p-2 border border-gray-300 rounded text-right"
+                rows="4"
+                placeholder="תיאור הספר"
+              />
+            </div>
+
+            <div className="flex gap-4 pt-4">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 py-2 px-4 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                <Save size={16} className="inline mr-2" />
+                שמור
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// קומפוננט כרטיס ספר
+const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook }) => (
+  <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
+    <div className="relative">
+      <img
+        src={book.image}
+        alt={book.title}
+        className="w-full h-48 object-cover"
+      />
+      <button
+        onClick={() => toggleFavorite(book.id)}
+        className={`absolute top-2 right-2 p-2 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-white text-gray-600'
+          } hover:scale-110 transition-transform`}
+      >
+        <Heart size={16} fill={favorites.has(book.id) ? 'white' : 'none'} />
+      </button>
+      <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs text-white bg-${getCategoryColor(book.category)}-500`}>
+        {categories.find(c => c.id === book.category)?.name}
+      </div>
+      <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs ${getStatusColor(book.status)}`}>
+        {getStatusText(book.status)}
+      </div>
+      {user?.role === 'admin' && (
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          <button
+            onClick={() => onEditBook(book)}
+            className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+            title="ערוך ספר"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={() => onDeleteBook(book.id)}
+            className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
+            title="מחק ספר"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+
+    <div className="p-4">
+      <h3 className="font-bold text-lg mb-1 text-right">{book.title}</h3>
+      <p className="text-gray-600 mb-2 text-right flex items-center justify-end">
+        <User size={14} className="ml-1" />
+        {book.author}
+      </p>
+
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          <Star className="text-yellow-400 fill-current" size={14} />
+          <span className="text-sm text-gray-600 ml-1">{book.rating}</span>
+        </div>
+        <div className="flex items-center text-sm text-gray-500">
+          <MapPin size={14} className="ml-1" />
+          <span>{book.location.color} {book.location.letter}{book.location.number}</span>
+        </div>
+      </div>
+
+      <p className="text-gray-700 text-sm mb-3 text-right line-clamp-2">
+        {book.description}
+      </p>
+
+      <button
+        onClick={() => setSelectedBook(book)}
+        className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors flex items-center justify-center"
+      >
+        צפה בפרטים
+        <ArrowRight size={16} className="mr-2" />
+      </button>
+    </div>
+  </div>
+);
+
+// קומפוננט פרטי ספר (חלון קופץ)
+const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook }) => (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 left-4 bg-white rounded-full p-2 shadow-md hover:bg-gray-100 z-10"
+        >
+          <X size={16} />
+        </button>
+        {user?.role === 'admin' && (
+          <div className="absolute top-4 left-16 flex gap-2 z-10">
+            <button
+              onClick={() => onEditBook(book)}
+              className="bg-blue-500 text-white rounded-full p-2 shadow-md hover:bg-blue-600"
+              title="ערוך ספר"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={() => onDeleteBook(book.id)}
+              className="bg-red-500 text-white rounded-full p-2 shadow-md hover:bg-red-600"
+              title="מחק ספר"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
+        <img
+          src={book.image}
+          alt={book.title}
+          className="w-full h-64 object-cover"
+        />
+        <div className={`absolute bottom-4 left-4 px-3 py-1 rounded text-sm ${getStatusColor(book.status)}`}>
+          {getStatusText(book.status)}
+        </div>
+      </div>
+
+      <div className="p-6">
+        <div className="flex justify-between items-start mb-4">
+          <button
+            onClick={() => toggleFavorite(book.id)}
+            className={`p-3 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
+              } hover:scale-110 transition-transform`}
+          >
+            <Heart size={20} fill={favorites.has(book.id) ? 'white' : 'none'} />
+          </button>
+          <div className="text-right flex-1 mr-4">
+            <h2 className="text-2xl font-bold mb-2">{book.title}</h2>
+            <p className="text-lg text-gray-600 mb-2">{book.author}</p>
+            <div className="flex items-center justify-end mb-2">
+              <span className="text-sm text-gray-500 ml-2">דירוג:</span>
+              <div className="flex items-center">
+                <Star className="text-yellow-400 fill-current mr-1" size={16} />
+                <span className="font-medium">{book.rating}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="text-right">
+              <h4 className="font-semibold mb-2 flex items-center justify-end">
+                <FileText size={16} className="ml-2" />
+                קטגוריה
+              </h4>
+              <span className={`px-3 py-1 rounded-full text-sm text-white bg-${getCategoryColor(book.category)}-500`}>
+                {categories.find(c => c.id === book.category)?.name}
+              </span>
+            </div>
+
+            <div className="text-right">
+              <h4 className="font-semibold mb-2 flex items-center justify-end">
+                <MapPin size={16} className="ml-2" />
+                מיקום בספריה
+              </h4>
+              <div className="bg-gray-100 p-3 rounded">
+                <div className="text-sm">
+                  <strong>צבע:</strong> {book.location.color}<br />
+                  <strong>אות:</strong> {book.location.letter}<br />
+                  <strong>מספר:</strong> {book.location.number}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <h4 className="font-semibold mb-2">תיאור הספר</h4>
+            <p className="text-gray-700 leading-relaxed">{book.description}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// קומפוננט קטלוג ספרים
+const BookCatalog = ({ books, setBooks, user }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [favorites, setFavorites] = useState(new Set());
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [editingBook, setEditingBook] = useState(null);
+  const [showBookEditor, setShowBookEditor] = useState(false);
+
+  // Initialize favorites from localStorage
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem('libraryFavorites');
+    if (savedFavorites) {
+      setFavorites(new Set(JSON.parse(savedFavorites)));
+    }
+  }, []);
+
+  // Save favorites to localStorage
+  useEffect(() => {
+    localStorage.setItem('libraryFavorites', JSON.stringify([...favorites]));
+  }, [favorites]);
+
+  const filteredBooks = books.filter(book => {
+    const matchesSearch = book.title.includes(searchQuery) ||
+      book.author.includes(searchQuery) ||
+      book.description.includes(searchQuery);
+    const matchesCategory = !selectedCategory || book.category === selectedCategory;
+    const matchesFavorites = !showFavorites || favorites.has(book.id);
+
+    return matchesSearch && matchesCategory && matchesFavorites;
+  });
+
+  const toggleFavorite = (bookId) => {
+    const newFavorites = new Set(favorites);
+    if (newFavorites.has(bookId)) {
+      newFavorites.delete(bookId);
+    } else {
+      newFavorites.add(bookId);
+    }
+    setFavorites(newFavorites);
+  };
+
+  // עריכת ספר
+  const handleEditBook = (book) => {
+    setEditingBook(book);
+    setShowBookEditor(true);
+    setSelectedBook(null);
+  };
+
+  // הוספת ספר חדש
+  const handleAddBook = () => {
+    setEditingBook(null);
+    setShowBookEditor(true);
+  };
+
+  // שמירת ספר (חדש או עריכה)
+  const handleSaveBook = (bookData) => {
+    if (editingBook) {
+      // עדכון ספר קיים
+      setBooks(prev => prev.map(book =>
+        book.id === editingBook.id ? { ...bookData, id: editingBook.id } : book
+      ));
+    } else {
+      // הוספת ספר חדש
+      const newBook = {
+        ...bookData,
+        id: Date.now().toString()
+      };
+      setBooks(prev => [...prev, newBook]);
+    }
+    setShowBookEditor(false);
+    setEditingBook(null);
+  };
+
+  // מחיקת ספר
+  const handleDeleteBook = (bookId) => {
+    if (confirm('האם אתה בטוח שברצונך למחוק את הספר? פעולה זו לא ניתנת לביטול.')) {
+      setBooks(prev => prev.filter(book => book.id !== bookId));
+      setSelectedBook(null);
+      // הסרה מהמועדפים אם קיים
+      const newFavorites = new Set(favorites);
+      newFavorites.delete(bookId);
+      setFavorites(newFavorites);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* כותרת וכפתורים */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900">קטלוג ספרים</h2>
+          <p className="text-gray-600 mt-1">חפש וגלה ספרים בספריית שִׁלֹה</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {user.role === 'admin' && (
+            <button
+              onClick={handleAddBook}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+            >
+              <Plus size={16} />
+              הוסף ספר חדש
+            </button>
+          )}
+          <button
+            onClick={() => setShowFavorites(!showFavorites)}
+            className={`px-4 py-2 rounded-lg ${showFavorites ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-700'
+              } hover:opacity-80 transition-opacity`}
+          >
+            <Heart size={16} className="inline ml-2" />
+            מועדפים ({favorites.size})
+          </button>
+        </div>
+      </div>
+
+      {/* חיפוש */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="חפש ספרים, מחברים או נושאים..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+        />
+        <Search className="absolute right-4 top-3.5 text-gray-400" size={20} />
+      </div>
+
+      {/* קטגוריות */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4 flex items-center">
+          <Filter className="ml-2" size={20} />
+          חיפוש לפי קטגוריות
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedCategory('')}
+            className={`px-3 py-1 rounded-full text-sm transition-colors ${!selectedCategory ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              } border`}
+          >
+            הכל
+          </button>
+          {categories.map(category => (
+            <button
+              key={category.id}
+              onClick={() => setSelectedCategory(category.id)}
+              className={`px-3 py-1 rounded-full text-sm transition-colors ${selectedCategory === category.id
+                ? `bg-${category.color}-500 text-white`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } border`}
+            >
+              {category.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* תוצאות */}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          {showFavorites ? 'הספרים המועדפים שלך' : `נמצאו ${filteredBooks.length} ספרים`}
+          {selectedCategory && ` בקטגוריה: ${categories.find(c => c.id === selectedCategory)?.name}`}
+        </h3>
+
+        {/* רשת ספרים */}
+        {filteredBooks.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredBooks.map(book => (
+              <BookCard
+                key={book.id}
+                book={book}
+                favorites={favorites}
+                toggleFavorite={toggleFavorite}
+                setSelectedBook={setSelectedBook}
+                user={user}
+                onEditBook={handleEditBook}
+                onDeleteBook={handleDeleteBook}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <Book className="mx-auto text-gray-400 mb-4" size={64} />
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">לא נמצאו ספרים</h3>
+            <p className="text-gray-500">נסה לשנות את מילות החיפוש או הקטגוריה</p>
+          </div>
+        )}
+      </div>
+
+      {/* פרטי ספר */}
+      {selectedBook && (
+        <BookDetail
+          book={selectedBook}
+          favorites={favorites}
+          toggleFavorite={toggleFavorite}
+          onClose={() => setSelectedBook(null)}
+          user={user}
+          onEditBook={handleEditBook}
+          onDeleteBook={handleDeleteBook}
+        />
+      )}
+
+      {/* עורך ספרים */}
+      {showBookEditor && (
+        <BookEditor
+          book={editingBook}
+          isNew={!editingBook}
+          onSave={handleSaveBook}
+          onCancel={() => {
+            setShowBookEditor(false);
+            setEditingBook(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 // ------------------------------------------------------
 // קומפוננטה ראשית עם לוח יהודי עברי בלבד
 // ------------------------------------------------------
@@ -59,11 +750,12 @@ export default function LibrarySystem() {
   const [selected, setSelected] = useState(startOfDay(new Date()));
   const [events, setEvents] = useState([]);
   const [monthlyHolidays, setMonthlyHolidays] = useState([]);
+  const [books, setBooks] = useState(initialBooks);
   const [announcements, setAnnouncements] = useState([
     {
       id: "1",
       title: "ברוכים הבאים למערכת החדשה!",
-      message: "המערכת הושדרגה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים",
+      message: "המערכת הושדרגה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים + קטלוג ספרים דיגיטלי",
       type: "success",
       createdAt: new Date().toISOString(),
       createdBy: "מנהל המערכת"
@@ -83,6 +775,18 @@ export default function LibrarySystem() {
   const [currentView, setCurrentView] = useState("calendar");
 
   const grid = useMemo(() => monthMatrix(cursor), [cursor]);
+
+  // שמירת ספרים ב-localStorage
+  useEffect(() => {
+    const savedBooks = localStorage.getItem('libraryBooks');
+    if (savedBooks) {
+      setBooks(JSON.parse(savedBooks));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('libraryBooks', JSON.stringify(books));
+  }, [books]);
 
   // טעינת חגים יהודיים לחודש הנוכחי
   useEffect(() => {
@@ -249,30 +953,43 @@ export default function LibrarySystem() {
           </div>
 
           <div className="flex items-center gap-3">
-            {user.role === 'admin' && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentView('calendar')}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'calendar'
-                      ? 'bg-emerald-700 text-white'
-                      : 'border border-stone-300 hover:bg-stone-100'
-                    }`}
-                >
-                  <Calendar className="w-4 h-4" />
-                  לוח שנה
-                </button>
+            {/* תפריט ניווט */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentView('calendar')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'calendar'
+                  ? 'bg-emerald-700 text-white'
+                  : 'border border-stone-300 hover:bg-stone-100'
+                  }`}
+              >
+                <Calendar className="w-4 h-4" />
+                לוח שנה
+              </button>
+
+              <button
+                onClick={() => setCurrentView('catalog')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'catalog'
+                  ? 'bg-emerald-700 text-white'
+                  : 'border border-stone-300 hover:bg-stone-100'
+                  }`}
+              >
+                <Book className="w-4 h-4" />
+                קטלוג ספרים
+              </button>
+
+              {user.role === 'admin' && (
                 <button
                   onClick={() => setCurrentView('admin')}
                   className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'admin'
-                      ? 'bg-emerald-700 text-white'
-                      : 'border border-stone-300 hover:bg-stone-100'
+                    ? 'bg-emerald-700 text-white'
+                    : 'border border-stone-300 hover:bg-stone-100'
                     }`}
                 >
                   <Settings className="w-4 h-4" />
                   ניהול
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
             <input
               placeholder="חיפוש בקטלוג..."
@@ -299,9 +1016,10 @@ export default function LibrarySystem() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
+        {/* תצוגת לוח שנה */}
         {currentView === 'calendar' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* עמודת תוכן/גיבורים */}
+            {/* עמודת תוכן/בוקריים */}
             <section className="lg:col-span-2 space-y-6">
               <div className="rounded-3xl overflow-hidden border border-stone-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-8">
                 <h2 className="text-2xl font-semibold mb-2">
@@ -309,7 +1027,7 @@ export default function LibrarySystem() {
                 </h2>
                 <p className="text-stone-700 mb-4">
                   {user.role === 'admin'
-                    ? 'כאן תוכל לנהל אוספים, אירועים ולוח השנה היהודי. יש לך גישה מלאה לכלל הפונקציות.'
+                    ? 'כאן תוכל לנהל אוספים, אירועים ולוח השנה היהודי. יש לך גישה מלאה לכללל הפונקציות.'
                     : 'כאן תוכל לראות את לוח השנה היהודי עם חגים, אירועים ותאריכים עבריים.'
                   }
                 </p>
@@ -547,16 +1265,7 @@ export default function LibrarySystem() {
                 </div>
               </div>
 
-              {/* פאנל ניהול למנהלים */}
-              {user.role === 'admin' && (
-                <AdminPanel
-                  events={events}
-                  announcements={announcements}
-                  onDeleteEvent={handleDeleteEvent}
-                />
-              )}
-
-              {/* סטטיסטיקות חגים */}
+              {/* סטטיסטיקות החודש */}
               <div className="rounded-3xl border border-stone-200 bg-white p-5">
                 <h3 className="font-medium mb-3">סטטיסטיקות החודש</h3>
                 <div className="space-y-2 text-sm">
@@ -567,6 +1276,10 @@ export default function LibrarySystem() {
                   <div className="flex justify-between">
                     <span>אירועים שלי:</span>
                     <span className="font-medium">{events.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ספרים בקטלוג:</span>
+                    <span className="font-medium">{books.length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>שבתות:</span>
@@ -581,11 +1294,18 @@ export default function LibrarySystem() {
           </div>
         )}
 
+        {/* תצוגת קטלוג ספרים */}
+        {currentView === 'catalog' && (
+          <BookCatalog books={books} setBooks={setBooks} user={user} />
+        )}
+
+        {/* תצוגת פאנל אדמין */}
         {currentView === 'admin' && user.role === 'admin' && (
           <AdminPanel
             events={events}
             announcements={announcements}
             onDeleteEvent={handleDeleteEvent}
+            currentUser={user}
           />
         )}
       </main>
@@ -598,7 +1318,7 @@ export default function LibrarySystem() {
               <div>
                 <div className="text-lg font-semibold">אירוע חדש</div>
                 <div className="text-sm text-stone-500">
-                  {fmtHebFull.format(selected)} · {selected.toLocaleDateString("he-IL")}
+                  {fmtHebFull.format(selected)} • {selected.toLocaleDateString("he-IL")}
                 </div>
                 <div className="text-xs text-blue-600">
                   {getHebrewDate(selected)}
@@ -661,7 +1381,7 @@ export default function LibrarySystem() {
       )}
 
       <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-sm text-stone-500">
-        מערכת ספריית שילה · נבנה ב-React + Firebase · לוח שנה יהודי אוטומטי עם @hebcal/core · ניהול הרשאות מתקדם
+        מערכת ספריית שילה • נבנה ב-React + Firebase • לוח שנה יהודי אוטומטי עם @hebcal/core • ניהול הרשאות מתקדם
       </footer>
     </div>
   );
