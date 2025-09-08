@@ -1,7 +1,4 @@
-// ------------------------------------------------------
-// 🔥 Firebase Database Helpers - פונקציות עזר לעבודה עם Firestore
-// ------------------------------------------------------
-
+// dbHelpers.js - פונקציות עזר לעבודה עם Firestore - מתוקן
 import {
     collection,
     doc,
@@ -14,12 +11,13 @@ import {
     query,
     where,
     orderBy,
-    onSnapshot
+    onSnapshot,
+    serverTimestamp
 } from 'firebase/firestore';
 import { db, isFirebaseEnabled } from './firebase.js';
 
 // ------------------------------------------------------
-// 👥 משתמשים (Users)
+// 👥 משתמשים (Users) - מתוקן
 // ------------------------------------------------------
 
 export const getUsers = async () => {
@@ -55,7 +53,10 @@ export const addUser = async (userData) => {
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'users'), userData);
+        const docRef = await addDoc(collection(db, 'users'), {
+            ...userData,
+            createdAt: serverTimestamp()
+        });
         return { id: docRef.id, ...userData };
     } catch (error) {
         console.error('שגיאה בהוספת משתמש:', error);
@@ -75,7 +76,10 @@ export const updateUser = async (userId, userData) => {
 
     try {
         const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, userData);
+        await updateDoc(userRef, {
+            ...userData,
+            updatedAt: serverTimestamp()
+        });
     } catch (error) {
         console.error('שגיאה בעדכון משתמש:', error);
         throw error;
@@ -95,6 +99,112 @@ export const deleteUser = async (userId) => {
     } catch (error) {
         console.error('שגיאה במחיקת משתמש:', error);
         throw error;
+    }
+};
+
+// התחברות משתמש - מתוקן
+export const loginUser = async (username, password) => {
+    // תחילה ננסה לוודא שיש משתמשים במערכת
+    await ensureDefaultUsers();
+
+    if (!isFirebaseEnabled) {
+        // התחברות מקומית
+        const users = await getUsers();
+        const user = users.find(u => u.username === username && u.password === password);
+        if (!user) {
+            throw new Error('שם משתמש או סיסמה שגויים');
+        }
+        return user;
+    }
+
+    try {
+        // חיפוש משתמש לפי שם משתמש
+        const usersQuery = query(
+            collection(db, 'users'),
+            where('username', '==', username)
+        );
+        const usersSnapshot = await getDocs(usersQuery);
+
+        if (usersSnapshot.empty) {
+            throw new Error('משתמש לא נמצא');
+        }
+
+        const userData = usersSnapshot.docs[0].data();
+
+        // בדיקת סיסמה (בסיסית - לייצור צריך הצפנה)
+        if (userData.password !== password) {
+            throw new Error('סיסמה שגויה');
+        }
+
+        return {
+            id: usersSnapshot.docs[0].id,
+            ...userData
+        };
+    } catch (error) {
+        console.error('שגיאה בהתחברות:', error);
+        throw error;
+    }
+};
+
+// בדיקת אם משתמש קיים
+export const checkUserExists = async (username) => {
+    if (!isFirebaseEnabled) {
+        const users = await getUsers();
+        return users.some(u => u.username === username);
+    }
+
+    try {
+        const usersQuery = query(
+            collection(db, 'users'),
+            where('username', '==', username)
+        );
+        const usersSnapshot = await getDocs(usersQuery);
+        return !usersSnapshot.empty;
+    } catch (error) {
+        console.error('שגיאה בבדיקת קיום משתמש:', error);
+        return false;
+    }
+};
+
+// פונקציה חדשה - ליצור משתמשי ברירת מחדל אם אין
+const ensureDefaultUsers = async () => {
+    try {
+        const users = await getUsers();
+        if (users.length === 0) {
+            console.log('יוצר משתמשי ברירת מחדל...');
+
+            const defaultUsers = [
+                {
+                    username: 'admin',
+                    password: 'admin123',
+                    name: 'מנהל ראשי',
+                    role: 'admin',
+                    email: 'admin@library.com',
+                    phone: '050-1234567',
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'מערכת',
+                    isActive: true
+                },
+                {
+                    username: 'user1',
+                    password: 'user123',
+                    name: 'משתמש להדוגמה',
+                    role: 'user',
+                    email: 'user@library.com',
+                    phone: '050-7654321',
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'מנהל ראשי',
+                    isActive: true
+                }
+            ];
+
+            for (const user of defaultUsers) {
+                await addUser(user);
+            }
+            console.log('משתמשי ברירת מחדל נוצרו בהצלחה');
+        }
+    } catch (error) {
+        console.error('שגיאה ביצירת משתמשי ברירת מחדל:', error);
     }
 };
 
@@ -132,7 +242,10 @@ export const addBook = async (bookData) => {
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'books'), bookData);
+        const docRef = await addDoc(collection(db, 'books'), {
+            ...bookData,
+            createdAt: serverTimestamp()
+        });
         return { id: docRef.id, ...bookData };
     } catch (error) {
         console.error('שגיאה בהוספת ספר:', error);
@@ -152,7 +265,10 @@ export const updateBook = async (bookId, bookData) => {
 
     try {
         const bookRef = doc(db, 'books', bookId);
-        await updateDoc(bookRef, bookData);
+        await updateDoc(bookRef, {
+            ...bookData,
+            updatedAt: serverTimestamp()
+        });
     } catch (error) {
         console.error('שגיאה בעדכון ספר:', error);
         throw error;
@@ -202,15 +318,20 @@ export const getCategories = async () => {
 export const addCategory = async (categoryData) => {
     if (!isFirebaseEnabled) {
         const categories = await getCategories();
-        const newCategory = { id: Date.now().toString(), ...categoryData };
+        const newCategory = { ...categoryData };
         categories.push(newCategory);
         localStorage.setItem('libraryCategories', JSON.stringify(categories));
         return newCategory;
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'categories'), categoryData);
-        return { id: docRef.id, ...categoryData };
+        // שימוש ב-setDoc עם ID מותאם אישית
+        const categoryRef = doc(db, 'categories', categoryData.id);
+        await setDoc(categoryRef, {
+            ...categoryData,
+            createdAt: serverTimestamp()
+        });
+        return categoryData;
     } catch (error) {
         console.error('שגיאה בהוספת קטגוריה:', error);
         throw error;
@@ -229,7 +350,10 @@ export const updateCategory = async (categoryId, categoryData) => {
 
     try {
         const categoryRef = doc(db, 'categories', categoryId);
-        await updateDoc(categoryRef, categoryData);
+        await updateDoc(categoryRef, {
+            ...categoryData,
+            updatedAt: serverTimestamp()
+        });
     } catch (error) {
         console.error('שגיאה בעדכון קטגוריה:', error);
         throw error;
@@ -253,7 +377,7 @@ export const deleteCategory = async (categoryId) => {
 };
 
 // ------------------------------------------------------
-// 🔔 הודעות מערכת (Announcements)
+// 📢 הודעות מערכת (Announcements)
 // ------------------------------------------------------
 
 export const getAnnouncements = async () => {
@@ -287,7 +411,10 @@ export const addAnnouncement = async (announcementData) => {
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'announcements'), announcementData);
+        const docRef = await addDoc(collection(db, 'announcements'), {
+            ...announcementData,
+            createdAt: serverTimestamp()
+        });
         return { id: docRef.id, ...announcementData };
     } catch (error) {
         console.error('שגיאה בהוספת הודעה:', error);
@@ -346,7 +473,10 @@ export const addEvent = async (eventData) => {
     }
 
     try {
-        const docRef = await addDoc(collection(db, 'events'), eventData);
+        const docRef = await addDoc(collection(db, 'events'), {
+            ...eventData,
+            createdAt: serverTimestamp()
+        });
         return { id: docRef.id, ...eventData };
     } catch (error) {
         console.error('שגיאה בהוספת אירוע:', error);
@@ -371,7 +501,7 @@ export const deleteEvent = async (eventId) => {
 };
 
 // ------------------------------------------------------
-// 🔄 פונקציות כלליות ומעקב שינויים
+// 📄 פונקציות כלליות ומעקב שינויים
 // ------------------------------------------------------
 
 // פונקציה למעקב אחר שינויים בזמן אמת
@@ -396,50 +526,23 @@ export const subscribeToCollection = (collectionName, callback) => {
     }
 };
 
-// פונקציה לאתחול ברירות מחדל
+// פונקציה לאתחול ברירות מחדל - מתוקנת
 export const initializeDefaultData = async () => {
     try {
-        // אתחול משתמשים ברירת מחדל
-        const users = await getUsers();
-        if (users.length === 0) {
-            const defaultUsers = [
-                {
-                    username: 'admin',
-                    password: 'admin123',
-                    name: 'מנהל ראשי',
-                    role: 'admin',
-                    email: 'admin@library.com',
-                    phone: '050-1234567',
-                    createdAt: new Date().toISOString(),
-                    createdBy: 'מערכת',
-                    isActive: true
-                },
-                {
-                    username: 'user1',
-                    password: 'user123',
-                    name: 'משתמש לדוגמה',
-                    role: 'user',
-                    email: 'user@library.com',
-                    phone: '050-7654321',
-                    createdAt: new Date().toISOString(),
-                    createdBy: 'מנהל ראשי',
-                    isActive: true
-                }
-            ];
+        console.log('מאתחל נתונים ראשוניים...');
 
-            for (const user of defaultUsers) {
-                await addUser(user);
-            }
-            console.log('משתמשי ברירת מחדל נוצרו');
-        }
+        // אתחול משתמשים ברירת מחדל
+        await ensureDefaultUsers();
 
         // אתחול קטגוריות ברירת מחדל
         const categories = await getCategories();
         if (categories.length === 0) {
+            console.log('יוצר קטגוריות ברירת מחדל...');
             const defaultCategories = [
-                { id: 'halacha', name: 'הלכה', color: 'blue' },
-                { id: 'aggadah', name: 'אגדה', color: 'green' },
-                { id: 'philosophy', name: 'מחשבה', color: 'purple' }
+                { id: 'torah', name: 'תנ"ך ותורה', color: 'blue', createdAt: new Date().toISOString(), createdBy: 'מערכת' },
+                { id: 'halacha', name: 'הלכה', color: 'green', createdAt: new Date().toISOString(), createdBy: 'מערכת' },
+                { id: 'aggadah', name: 'אגדה', color: 'purple', createdAt: new Date().toISOString(), createdBy: 'מערכת' },
+                { id: 'philosophy', name: 'מחשבה', color: 'orange', createdAt: new Date().toISOString(), createdBy: 'מערכת' }
             ];
 
             for (const category of defaultCategories) {
@@ -473,7 +576,7 @@ export const clearAllData = async () => {
             }
         }
 
-        // מחיקת localStorage גם כן
+        // מחיקת localStorage בכל מקרה
         localStorage.removeItem('libraryUsers');
         localStorage.removeItem('libraryBooks');
         localStorage.removeItem('libraryCategories');

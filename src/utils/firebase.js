@@ -1,19 +1,16 @@
-// ------------------------------------------------------
-// ⚙️ Firebase Configuration
-// ------------------------------------------------------
-
+// firebase.js - תצורת Firebase
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
-// קונפיגורציה - תחליפו עם הערכים האמיתיים מ-Firebase Console
+// קונפיגורציה - עם הערכים האמיתיים שלך מ-Firebase Console
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "PLACEHOLDER",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "PLACEHOLDER.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "PLACEHOLDER",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "PLACEHOLDER.appspot.com",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "PLACEHOLDER",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "PLACEHOLDER"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAftm6WfmZRQ64mVQlCAS6vWZ6FJZoCL4I",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "shilo-9fb0b.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "shilo-9fb0b",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "shilo-9fb0b.firebasestorage.app",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1047885603466",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1047885603466:web:c3c084374f747d76f0c373"
 };
 
 // אתחול Firebase

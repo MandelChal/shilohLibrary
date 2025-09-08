@@ -7,7 +7,7 @@ import Navigation from './components/Navigation';
 import SystemAnnouncements from './components/SystemAnnouncements';
 import AdminPanel from './components/AdminPanel';
 
-// Utils - עם תצוגה עברית בלבד
+// Utils - עבודה עברית בלבד
 import {
   fmtHebDay,
   fmtHebMonthYear,
@@ -28,28 +28,34 @@ import {
   getHebrewHolidayName
 } from './utils/dateHelpers';
 
-// Firebase (optional - מוגדר לעבוד גם בלי)
+// Firebase DB helpers
+import {
+  getUsers,
+  addUser,
+  updateUser,
+  deleteUser,
+  getBooks,
+  addBook,
+  updateBook,
+  deleteBook,
+  getCategories,
+  addCategory,
+  updateCategory,
+  deleteCategory,
+  getAnnouncements,
+  addAnnouncement,
+  deleteAnnouncement,
+  getEvents,
+  addEvent,
+  deleteEvent,
+  subscribeToCollection,
+  initializeDefaultData
+} from './utils/dbHelpers';
+
+// Firebase config
 import { db, isFirebaseEnabled } from './utils/firebase';
 
-// Firebase imports (conditional)
-let collection, addDoc, onSnapshot, query, where, serverTimestamp, Timestamp;
-
-if (isFirebaseEnabled) {
-  try {
-    const firestore = await import('firebase/firestore');
-    collection = firestore.collection;
-    addDoc = firestore.addDoc;
-    onSnapshot = firestore.onSnapshot;
-    query = firestore.query;
-    where = firestore.where;
-    serverTimestamp = firestore.serverTimestamp;
-    Timestamp = firestore.Timestamp;
-  } catch (error) {
-    console.warn('Firebase imports failed:', error);
-  }
-}
-
-// נתוני ספרים לדוגמה
+// נתוני ספרים להדוגמה - יעמסו מ-Firebase או יישארו כ-fallback
 const initialBooks = [
   {
     id: '1',
@@ -72,55 +78,11 @@ const initialBooks = [
     image: '/api/placeholder/200/250',
     rating: 4.9,
     status: 'borrowed'
-  },
-  {
-    id: '3',
-    title: 'תהילים מפורש',
-    author: 'מלבי"ם',
-    category: 'nevi',
-    location: { color: 'ירוק', letter: 'ג', number: '7' },
-    description: 'פירוש המלבי"ם על ספר תהילים',
-    image: '/api/placeholder/200/250',
-    rating: 4.7,
-    status: 'available'
-  },
-  {
-    id: '4',
-    title: 'בראשית רבה',
-    author: 'חכמי התלמוד',
-    category: 'midrash',
-    location: { color: 'סגול', letter: 'ד', number: '12' },
-    description: 'מדרש רבה על ספר בראשית',
-    image: '/api/placeholder/200/250',
-    rating: 4.6,
-    status: 'maintenance'
-  },
-  {
-    id: '5',
-    title: 'משנה סדר מועד',
-    author: 'תנאים',
-    category: 'talmud',
-    location: { color: 'כתום', letter: 'ה', number: '31' },
-    description: 'משניות סדר מועד עם פירושים',
-    image: '/api/placeholder/200/250',
-    rating: 4.5,
-    status: 'available'
-  },
-  {
-    id: '6',
-    title: 'שו"ת חתם סופר',
-    author: 'החתם סופר',
-    category: 'responsa',
-    location: { color: 'חום', letter: 'ו', number: '45' },
-    description: 'שאלות ותשובות מהחתם סופר',
-    image: '/api/placeholder/200/250',
-    rating: 4.8,
-    status: 'available'
   }
 ];
 
-// קטגוריות ספרים
-const categories = [
+// קטגוריות ספרים - יעמסו מ-Firebase או יישארו כ-fallback
+const initialCategories = [
   { id: 'torah', name: 'תנ"ך ותורה', color: 'blue' },
   { id: 'nevi', name: 'נביאים וכתובים', color: 'green' },
   { id: 'midrash', name: 'מדרשים', color: 'purple' },
@@ -151,13 +113,13 @@ const getStatusText = (status) => {
   }
 };
 
-const getCategoryColor = (category) => {
+const getCategoryColor = (category, categories) => {
   const cat = categories.find(c => c.id === category);
   return cat ? cat.color : 'gray';
 };
 
 // קומפוננט עריכת ספר
-const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
+const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) => {
   const [formData, setFormData] = useState(book || {
     title: '',
     author: '',
@@ -266,7 +228,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2 text-right">מיקום בספריה</label>
+              <label className="block text-sm font-medium mb-2 text-right">מיקום בספרייה</label>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <input
@@ -350,7 +312,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
 };
 
 // קומפוננט כרטיס ספר
-const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook }) => (
+const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook, categories }) => (
   <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
     <div className="relative">
       <img
@@ -365,7 +327,7 @@ const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEd
       >
         <Heart size={16} fill={favorites.has(book.id) ? 'white' : 'none'} />
       </button>
-      <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs text-white bg-${getCategoryColor(book.category)}-500`}>
+      <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs text-white bg-${getCategoryColor(book.category, categories)}-500`}>
         {categories.find(c => c.id === book.category)?.name}
       </div>
       <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs ${getStatusColor(book.status)}`}>
@@ -425,7 +387,7 @@ const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEd
 );
 
 // קומפוננט פרטי ספר (חלון קופץ)
-const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook }) => (
+const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook, categories }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
       <div className="relative">
@@ -492,7 +454,7 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
                 <FileText size={16} className="ml-2" />
                 קטגוריה
               </h4>
-              <span className={`px-3 py-1 rounded-full text-sm text-white bg-${getCategoryColor(book.category)}-500`}>
+              <span className={`px-3 py-1 rounded-full text-sm text-white bg-${getCategoryColor(book.category, categories)}-500`}>
                 {categories.find(c => c.id === book.category)?.name}
               </span>
             </div>
@@ -500,7 +462,7 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
             <div className="text-right">
               <h4 className="font-semibold mb-2 flex items-center justify-end">
                 <MapPin size={16} className="ml-2" />
-                מיקום בספריה
+                מיקום בספרייה
               </h4>
               <div className="bg-gray-100 p-3 rounded">
                 <div className="text-sm">
@@ -523,7 +485,7 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
 );
 
 // קומפוננט קטלוג ספרים
-const BookCatalog = ({ books, setBooks, user }) => {
+const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedBook, setSelectedBook] = useState(null);
@@ -579,33 +541,45 @@ const BookCatalog = ({ books, setBooks, user }) => {
   };
 
   // שמירת ספר (חדש או עריכה)
-  const handleSaveBook = (bookData) => {
-    if (editingBook) {
-      // עדכון ספר קיים
-      setBooks(prev => prev.map(book =>
-        book.id === editingBook.id ? { ...bookData, id: editingBook.id } : book
-      ));
-    } else {
-      // הוספת ספר חדש
-      const newBook = {
-        ...bookData,
-        id: Date.now().toString()
-      };
-      setBooks(prev => [...prev, newBook]);
+  const handleSaveBook = async (bookData) => {
+    try {
+      if (editingBook) {
+        // עדכון ספר קיים
+        await updateBook(editingBook.id, bookData);
+        const updatedBooks = books.map(book =>
+          book.id === editingBook.id ? { ...bookData, id: editingBook.id } : book
+        );
+        setBooks(updatedBooks);
+      } else {
+        // הוספת ספר חדש
+        const newBook = await addBook(bookData);
+        setBooks(prev => [...prev, newBook]);
+      }
+      setShowBookEditor(false);
+      setEditingBook(null);
+      console.log('ספר נשמר בהצלחה');
+    } catch (error) {
+      console.error('שגיאה בשמירת ספר:', error);
+      alert('שגיאה בשמירת הספר: ' + error.message);
     }
-    setShowBookEditor(false);
-    setEditingBook(null);
   };
 
   // מחיקת ספר
-  const handleDeleteBook = (bookId) => {
+  const handleDeleteBook = async (bookId) => {
     if (confirm('האם אתה בטוח שברצונך למחוק את הספר? פעולה זו לא ניתנת לביטול.')) {
-      setBooks(prev => prev.filter(book => book.id !== bookId));
-      setSelectedBook(null);
-      // הסרה מהמועדפים אם קיים
-      const newFavorites = new Set(favorites);
-      newFavorites.delete(bookId);
-      setFavorites(newFavorites);
+      try {
+        await deleteBook(bookId);
+        setBooks(prev => prev.filter(book => book.id !== bookId));
+        setSelectedBook(null);
+        // הסרה מהמועדפים אם קיים
+        const newFavorites = new Set(favorites);
+        newFavorites.delete(bookId);
+        setFavorites(newFavorites);
+        console.log('ספר נמחק בהצלחה');
+      } catch (error) {
+        console.error('שגיאה במחיקת ספר:', error);
+        alert('שגיאה במחיקת הספר: ' + error.message);
+      }
     }
   };
 
@@ -699,6 +673,7 @@ const BookCatalog = ({ books, setBooks, user }) => {
                 user={user}
                 onEditBook={handleEditBook}
                 onDeleteBook={handleDeleteBook}
+                categories={categories}
               />
             ))}
           </div>
@@ -721,6 +696,7 @@ const BookCatalog = ({ books, setBooks, user }) => {
           user={user}
           onEditBook={handleEditBook}
           onDeleteBook={handleDeleteBook}
+          categories={categories}
         />
       )}
 
@@ -734,6 +710,7 @@ const BookCatalog = ({ books, setBooks, user }) => {
             setShowBookEditor(false);
             setEditingBook(null);
           }}
+          categories={categories}
         />
       )}
     </div>
@@ -741,7 +718,7 @@ const BookCatalog = ({ books, setBooks, user }) => {
 };
 
 // ------------------------------------------------------
-// קומפוננטה ראשית עם לוח יהודי עברי בלבד
+// קומפוננטת ראשית עם לוח יהודי עברי בלבד + Firebase
 // ------------------------------------------------------
 export default function LibrarySystem() {
   const [user, setUser] = useState(null);
@@ -750,25 +727,9 @@ export default function LibrarySystem() {
   const [selected, setSelected] = useState(startOfDay(new Date()));
   const [events, setEvents] = useState([]);
   const [monthlyHolidays, setMonthlyHolidays] = useState([]);
-  const [books, setBooks] = useState(initialBooks);
-  const [announcements, setAnnouncements] = useState([
-    {
-      id: "1",
-      title: "ברוכים הבאים למערכת החדשה!",
-      message: "המערכת הושדרגה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים + קטלוג ספרים דיגיטלי",
-      type: "success",
-      createdAt: new Date().toISOString(),
-      createdBy: "מנהל המערכת"
-    },
-    {
-      id: "2",
-      title: "לוח שנה יהודי מעודכן",
-      message: "כעת הלוח מציג חגים יהודיים, זמני שבת והדלקת נרות באופן אוטומטי",
-      type: "info",
-      createdAt: new Date().toISOString(),
-      createdBy: "מנהל המערכת"
-    }
-  ]);
+  const [books, setBooks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [newEvent, setNewEvent] = useState({ title: "", description: "", time: "" });
   const [loading, setLoading] = useState(false);
@@ -776,62 +737,109 @@ export default function LibrarySystem() {
 
   const grid = useMemo(() => monthMatrix(cursor), [cursor]);
 
-  // שמירת ספרים ב-localStorage
+  // טעינה ראשונית של נתונים מ-Firebase
   useEffect(() => {
-    const savedBooks = localStorage.getItem('libraryBooks');
-    if (savedBooks) {
-      setBooks(JSON.parse(savedBooks));
-    }
-  }, []);
+    const initializeData = async () => {
+      try {
+        // אתחול נתונים ברירת מחדל אם צריך
+        await initializeDefaultData();
 
-  useEffect(() => {
-    localStorage.setItem('libraryBooks', JSON.stringify(books));
-  }, [books]);
+        // טעינת נתונים
+        const [booksData, categoriesData, announcementsData, eventsData] = await Promise.all([
+          getBooks(),
+          getCategories(),
+          getAnnouncements(),
+          getEvents()
+        ]);
+
+        console.log('נתונים נטענו מ-Firebase:', {
+          books: booksData.length,
+          categories: categoriesData.length,
+          announcements: announcementsData.length,
+          events: eventsData.length
+        });
+
+        setBooks(booksData.length > 0 ? booksData : initialBooks);
+        setCategories(categoriesData.length > 0 ? categoriesData : initialCategories);
+        setAnnouncements(announcementsData.length > 0 ? announcementsData : [
+          {
+            id: "1",
+            title: "ברוכים הבאים למערכת החדשה!",
+            message: "המערכת הושדרה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים + קטלוג ספרים דיגיטלי",
+            type: "success",
+            createdAt: new Date().toISOString(),
+            createdBy: "מנהל המערכת"
+          }
+        ]);
+        setEvents(eventsData);
+
+      } catch (error) {
+        console.error('שגיאה בטעינת נתונים:', error);
+        // fallback לנתונים מקומיים
+        setBooks(initialBooks);
+        setCategories(initialCategories);
+        setAnnouncements([
+          {
+            id: "1",
+            title: "מצב מקומי",
+            message: "המערכת רצה במצב מקומי ללא חיבור ל-Firebase",
+            type: "warning",
+            createdAt: new Date().toISOString(),
+            createdBy: "מערכת"
+          }
+        ]);
+      }
+    };
+
+    initializeData();
+  }, []);
 
   // טעינת חגים יהודיים לחודש הנוכחי
   useEffect(() => {
     try {
       const holidays = getCachedJewishEventsForMonth(cursor.getFullYear(), cursor.getMonth());
       setMonthlyHolidays(holidays);
-      console.log(`נטענו ${holidays.length} אירועים יהודיים לחודש ${cursor.getMonth() + 1}/${cursor.getFullYear()}`);
+      console.log(`נטענו ${holidays.length} אירועי יהודיים לחודש ${cursor.getMonth() + 1}/${cursor.getFullYear()}`);
     } catch (error) {
       console.error('שגיאה בטעינת חגים יהודיים:', error);
       setMonthlyHolidays([]);
     }
   }, [cursor]);
 
-  // קריאת אירועים מ-Firebase (אם מוגדר)
+  // מעקב אחר שינויים ב-Firebase בזמן אמת
   useEffect(() => {
     if (!isFirebaseEnabled || !db) {
       console.log('רץ במצב מקומי - Firebase לא מוגדר');
       return;
     }
 
-    const startWindow = startOfDay(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
-    const endWindow = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    endWindow.setHours(23, 59, 59, 999);
+    const unsubscribeEvents = subscribeToCollection('events', (eventsData) => {
+      setEvents(eventsData);
+      console.log('אירועים עודכנו מ-Firebase:', eventsData.length);
+    });
 
-    try {
-      const q = query(
-        collection(db, "events"),
-        where("date", ">=", Timestamp.fromDate(startWindow)),
-        where("date", "<=", Timestamp.fromDate(endWindow))
-      );
+    const unsubscribeBooks = subscribeToCollection('books', (booksData) => {
+      setBooks(booksData);
+      console.log('ספרים עודכנו מ-Firebase:', booksData.length);
+    });
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const eventList = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setEvents(eventList);
-        console.log('אירועים נטענו מ-Firebase:', eventList.length);
-      });
+    const unsubscribeCategories = subscribeToCollection('categories', (categoriesData) => {
+      setCategories(categoriesData);
+      console.log('קטגוריות עודכנו מ-Firebase:', categoriesData.length);
+    });
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('שגיאה בטעינת אירועים:', error);
-    }
-  }, [cursor.getFullYear(), cursor.getMonth()]);
+    const unsubscribeAnnouncements = subscribeToCollection('announcements', (announcementsData) => {
+      setAnnouncements(announcementsData);
+      console.log('הודעות עודכנו מ-Firebase:', announcementsData.length);
+    });
+
+    return () => {
+      unsubscribeEvents();
+      unsubscribeBooks();
+      unsubscribeCategories();
+      unsubscribeAnnouncements();
+    };
+  }, []);
 
   const eventsByKey = useMemo(() => {
     const map = new Map();
@@ -863,6 +871,26 @@ export default function LibrarySystem() {
   const monthLabelHeb = fmtHebMonthYear.format(cursor);
   const monthLabelGreg = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(cursor);
 
+  // התחברות משתמש - *** מתוקן כאן ***
+  const handleLogin = (userData) => {
+    try {
+      console.log('מקבל נתוני משתמש מ-LoginScreen:', userData);
+
+      // בדיקה שהנתונים תקינים
+      if (!userData || !userData.name) {
+        console.error('נתוני משתמש לא תקינים:', userData);
+        alert('שגיאה בנתוני המשתמש');
+        return;
+      }
+
+      setUser(userData);
+      console.log('התחברות מוצלחת למערכת:', userData.name);
+    } catch (error) {
+      console.error('שגיאה בטיפול בהתחברות:', error);
+      alert('שגיאה בהתחברות למערכת: ' + error.message);
+    }
+  };
+
   async function handleAddEvent() {
     if (!newEvent.title.trim()) return;
     setLoading(true);
@@ -872,23 +900,13 @@ export default function LibrarySystem() {
         title: newEvent.title.trim(),
         description: newEvent.description.trim(),
         time: newEvent.time.trim(),
-        date: isFirebaseEnabled ? Timestamp.fromDate(selected) : selected.toISOString(),
-        createdAt: isFirebaseEnabled ? serverTimestamp() : new Date().toISOString(),
+        date: selected.toISOString(),
+        createdAt: new Date().toISOString(),
         createdBy: user.name
       };
 
-      if (isFirebaseEnabled && db) {
-        await addDoc(collection(db, "events"), eventData);
-        console.log('אירוע נשמר ב-Firebase');
-      } else {
-        const newEventObj = {
-          id: Date.now().toString(),
-          ...eventData,
-          date: selected.toISOString()
-        };
-        setEvents(prev => [...prev, newEventObj]);
-        console.log('אירוע נשמר מקומית');
-      }
+      const savedEvent = await addEvent(eventData);
+      console.log('אירוע נשמר:', savedEvent);
 
       setNewEvent({ title: "", description: "", time: "" });
       setPanelOpen(false);
@@ -900,29 +918,42 @@ export default function LibrarySystem() {
     }
   }
 
-  const handleDeleteEvent = (eventId) => {
+  const handleDeleteEvent = async (eventId) => {
     if (confirm("האם אתה בטוח שברצונך למחוק את האירוע?")) {
-      if (isFirebaseEnabled && db) {
-        console.log('מחיקה מ-Firebase:', eventId);
-      } else {
-        setEvents(prev => prev.filter(e => e.id !== eventId));
-        console.log('אירוע נמחק מקומית:', eventId);
+      try {
+        await deleteEvent(eventId);
+        console.log('אירוע נמחק:', eventId);
+      } catch (error) {
+        console.error('שגיאה במחיקת אירוע:', error);
+        alert('שגיאה במחיקת האירוע: ' + error.message);
       }
     }
   };
 
-  const handleAddAnnouncement = (announcement) => {
-    setAnnouncements(prev => [announcement, ...prev]);
+  const handleAddAnnouncement = async (announcementData) => {
+    try {
+      const savedAnnouncement = await addAnnouncement(announcementData);
+      console.log('הודעה נוספה:', savedAnnouncement);
+    } catch (error) {
+      console.error('שגיאה בהוספת הודעה:', error);
+      alert('שגיאה בהוספת ההודעה: ' + error.message);
+    }
   };
 
-  const handleDeleteAnnouncement = (announcementId) => {
-    setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+  const handleDeleteAnnouncement = async (announcementId) => {
+    try {
+      await deleteAnnouncement(announcementId);
+      console.log('הודעה נמחקה:', announcementId);
+    } catch (error) {
+      console.error('שגיאה במחיקת הודעה:', error);
+      alert('שגיאה במחיקת ההודעה: ' + error.message);
+    }
   };
 
   const weekdays = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   return (
@@ -944,7 +975,7 @@ export default function LibrarySystem() {
           <div className="flex items-center gap-8">
             <div>
               <p className="text-sm text-stone-500">
-                {user.role === 'admin' ? 'פאנל ניהול' : 'לוח שנה עברי ואירועי הספרייה'}
+                {user.role === 'admin' ? 'פנל ניהול' : 'לוח שנה עברי ואירועי הספרייה'}
               </p>
               {!isFirebaseEnabled && (
                 <p className="text-xs text-amber-600">רץ במצב מקומי</p>
@@ -1296,10 +1327,16 @@ export default function LibrarySystem() {
 
         {/* תצוגת קטלוג ספרים */}
         {currentView === 'catalog' && (
-          <BookCatalog books={books} setBooks={setBooks} user={user} />
+          <BookCatalog
+            books={books}
+            setBooks={setBooks}
+            user={user}
+            categories={categories}
+            onBooksChange={(newBooks) => setBooks(newBooks)}
+          />
         )}
 
-        {/* תצוגת פאנל אדמין */}
+        {/* תצוגת פנל אדמין */}
         {currentView === 'admin' && user.role === 'admin' && (
           <AdminPanel
             events={events}
@@ -1310,7 +1347,7 @@ export default function LibrarySystem() {
         )}
       </main>
 
-      {/* פאנל הוספת אירוע - רק למנהלים */}
+      {/* פנל הוספת אירוע - רק למנהלים */}
       {panelOpen && user.role === 'admin' && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/30 p-4" aria-modal="true" role="dialog">
           <div className="w-full max-w-lg rounded-3xl bg-white shadow-xl border border-stone-200 overflow-hidden">

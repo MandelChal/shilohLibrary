@@ -1,13 +1,16 @@
 {
-  "name": "shiloh-library",
+  "name": "shilo-library-system",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
+  "description": "מערכת ספריית שילה - לוח שנה יהודי ומערכת ניהול ספרים עם Firebase",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
+    "firebase:init": "firebase init",
+    "firebase:deploy": "firebase deploy"
   },
   "dependencies": {
     "@hebcal/core": "^5.10.1",
@@ -28,5 +31,24 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "vite": "^5.0.8"
-  }
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/shilo-library-system.git"
+  },
+  "keywords": [
+    "library",
+    "hebrew",
+    "jewish-calendar",
+    "firebase",
+    "react",
+    "vite",
+    "tailwindcss"
+  ],
+  "author": "ספריית שילה",
+  "license": "MIT"
 }
