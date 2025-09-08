@@ -6,7 +6,7 @@ import LoginScreen from './components/LoginScreen';
 import Navigation from './components/Navigation';
 import SystemAnnouncements from './components/SystemAnnouncements';
 import AdminPanel from './components/AdminPanel';
-
+import { Bell, RefreshCw } from 'lucide-react';
 // Utils - עבודה עברית בלבד
 import {
   fmtHebDay,
@@ -49,7 +49,11 @@ import {
   addEvent,
   deleteEvent,
   subscribeToCollection,
-  initializeDefaultData
+  initializeDefaultData,
+  addLoanRequest,
+  getLoanRequests,
+  updateLoanRequestStatus,
+  deleteLoanRequest
 } from './utils/dbHelpers';
 
 // Firebase config
@@ -311,180 +315,410 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
   );
 };
 
-// קומפוננט כרטיס ספר
-const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook, categories }) => (
-  <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
-    <div className="relative">
-      <img
-        src={book.image}
-        alt={book.title}
-        className="w-full h-48 object-cover"
-      />
-      <button
-        onClick={() => toggleFavorite(book.id)}
-        className={`absolute top-2 right-2 p-2 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-white text-gray-600'
-          } hover:scale-110 transition-transform`}
-      >
-        <Heart size={16} fill={favorites.has(book.id) ? 'white' : 'none'} />
-      </button>
-      <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs text-white bg-${getCategoryColor(book.category, categories)}-500`}>
-        {categories.find(c => c.id === book.category)?.name}
-      </div>
-      <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs ${getStatusColor(book.status)}`}>
-        {getStatusText(book.status)}
-      </div>
-      {user?.role === 'admin' && (
-        <div className="absolute bottom-2 right-2 flex gap-1">
+
+// עדכן את BookDetail להוסיף ניהול בקשות לאדמין
+const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
+  const [showLoanForm, setShowLoanForm] = useState(false);
+  const [loanData, setLoanData] = useState({
+    contactPhone: '',
+    notes: '',
+    returnDate: ''
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [adminNotes, setAdminNotes] = useState('');
+
+  const handleLoanRequest = async (e) => {
+    e.preventDefault();
+
+    if (!loanData.contactPhone.trim()) {
+      alert('יש למלא מספר טלפון ליצירת קשר');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const requestData = {
+        bookId: book.id,
+        bookTitle: book.title,
+        requesterId: user.id || user.username,
+        requesterName: user.name,
+        contactPhone: loanData.contactPhone.trim(),
+        notes: loanData.notes.trim(),
+        expectedReturnDate: loanData.returnDate || null,
+        status: 'pending'
+      };
+
+      await addLoanRequest(requestData);
+
+      alert('בקשתך נשלחה בהצלחה! האדמין יבדוק אותה ויחזור אליך.');
+      setShowLoanForm(false);
+      setLoanData({ contactPhone: '', notes: '', returnDate: '' });
+
+    } catch (error) {
+      console.error('שגיאה בשליחת בקשת השאלה:', error);
+      alert('שגיאה בשליחת הבקשה: ' + error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateRequestStatus = async (requestId, newStatus) => {
+    setSubmitting(true);
+    try {
+      await updateLoanRequestStatus(requestId, newStatus, adminNotes);
+
+      // אם מאשרים - עדכון סטטוס הספר למושאל
+      if (newStatus === 'approved') {
+        const request = pendingRequests.find(r => r.id === requestId);
+        await updateBook(book.id, {
+          status: 'borrowed',
+          borrowedBy: request?.requesterName,
+          borrowDate: new Date().toISOString()
+        });
+      }
+
+      // קריאה לפונקציה של הקומפוננט האב לעדכון
+      if (onUpdateRequestStatus) {
+        await onUpdateRequestStatus(requestId, newStatus, book.id);
+      }
+
+      setSelectedRequest(null);
+      setAdminNotes('');
+
+      alert(newStatus === 'approved' ? 'הבקשה אושרה והספר הועבר למצב מושאל' : 'הבקשה נדחתה');
+
+    } catch (error) {
+      console.error('שגיאה בעדכון בקשה:', error);
+      alert('שגיאה בעדכון הבקשה: ' + error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="relative">
           <button
-            onClick={() => onEditBook(book)}
-            className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-            title="ערוך ספר"
+            onClick={onClose}
+            className="absolute top-4 left-4 bg-white rounded-full p-2 shadow-md hover:bg-gray-100 z-10"
           >
-            <Edit2 size={14} />
+            <X size={16} />
           </button>
-          <button
-            onClick={() => onDeleteBook(book.id)}
-            className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
-            title="מחק ספר"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      )}
-    </div>
-
-    <div className="p-4">
-      <h3 className="font-bold text-lg mb-1 text-right">{book.title}</h3>
-      <p className="text-gray-600 mb-2 text-right flex items-center justify-end">
-        <User size={14} className="ml-1" />
-        {book.author}
-      </p>
-
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center">
-          <Star className="text-yellow-400 fill-current" size={14} />
-          <span className="text-sm text-gray-600 ml-1">{book.rating}</span>
-        </div>
-        <div className="flex items-center text-sm text-gray-500">
-          <MapPin size={14} className="ml-1" />
-          <span>{book.location.color} {book.location.letter}{book.location.number}</span>
-        </div>
-      </div>
-
-      <p className="text-gray-700 text-sm mb-3 text-right line-clamp-2">
-        {book.description}
-      </p>
-
-      <button
-        onClick={() => setSelectedBook(book)}
-        className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors flex items-center justify-center"
-      >
-        צפה בפרטים
-        <ArrowRight size={16} className="mr-2" />
-      </button>
-    </div>
-  </div>
-);
-
-// קומפוננט פרטי ספר (חלון קופץ)
-const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook, categories }) => (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-      <div className="relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 left-4 bg-white rounded-full p-2 shadow-md hover:bg-gray-100 z-10"
-        >
-          <X size={16} />
-        </button>
-        {user?.role === 'admin' && (
-          <div className="absolute top-4 left-16 flex gap-2 z-10">
-            <button
-              onClick={() => onEditBook(book)}
-              className="bg-blue-500 text-white rounded-full p-2 shadow-md hover:bg-blue-600"
-              title="ערוך ספר"
-            >
-              <Edit2 size={16} />
-            </button>
-            <button
-              onClick={() => onDeleteBook(book.id)}
-              className="bg-red-500 text-white rounded-full p-2 shadow-md hover:bg-red-600"
-              title="מחק ספר"
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        )}
-        <img
-          src={book.image}
-          alt={book.title}
-          className="w-full h-64 object-cover"
-        />
-        <div className={`absolute bottom-4 left-4 px-3 py-1 rounded text-sm ${getStatusColor(book.status)}`}>
-          {getStatusText(book.status)}
-        </div>
-      </div>
-
-      <div className="p-6">
-        <div className="flex justify-between items-start mb-4">
-          <button
-            onClick={() => toggleFavorite(book.id)}
-            className={`p-3 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
-              } hover:scale-110 transition-transform`}
-          >
-            <Heart size={20} fill={favorites.has(book.id) ? 'white' : 'none'} />
-          </button>
-          <div className="text-right flex-1 mr-4">
-            <h2 className="text-2xl font-bold mb-2">{book.title}</h2>
-            <p className="text-lg text-gray-600 mb-2">{book.author}</p>
-            <div className="flex items-center justify-end mb-2">
-              <span className="text-sm text-gray-500 ml-2">דירוג:</span>
-              <div className="flex items-center">
-                <Star className="text-yellow-400 fill-current mr-1" size={16} />
-                <span className="font-medium">{book.rating}</span>
-              </div>
+          {user?.role === 'admin' && (
+            <div className="absolute top-4 left-16 flex gap-2 z-10">
+              <button
+                onClick={() => onEditBook(book)}
+                className="bg-blue-500 text-white rounded-full p-2 shadow-md hover:bg-blue-600"
+                title="ערוך ספר"
+              >
+                <Edit2 size={16} />
+              </button>
+              <button
+                onClick={() => onDeleteBook(book.id)}
+                className="bg-red-500 text-white rounded-full p-2 shadow-md hover:bg-red-600"
+                title="מחק ספר"
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
+          )}
+          <img
+            src={book.image}
+            alt={book.title}
+            className="w-full h-64 object-cover"
+          />
+          <div className={`absolute bottom-4 left-4 px-3 py-1 rounded text-sm ${getStatusColor(book.status)}`}>
+            {getStatusText(book.status)}
           </div>
         </div>
 
-        <div className="border-t pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="text-right">
-              <h4 className="font-semibold mb-2 flex items-center justify-end">
-                <FileText size={16} className="ml-2" />
-                קטגוריה
-              </h4>
-              <span className={`px-3 py-1 rounded-full text-sm text-white bg-${getCategoryColor(book.category, categories)}-500`}>
-                {categories.find(c => c.id === book.category)?.name}
-              </span>
-            </div>
-
-            <div className="text-right">
-              <h4 className="font-semibold mb-2 flex items-center justify-end">
-                <MapPin size={16} className="ml-2" />
-                מיקום בספרייה
-              </h4>
-              <div className="bg-gray-100 p-3 rounded">
-                <div className="text-sm">
-                  <strong>צבע:</strong> {book.location.color}<br />
-                  <strong>אות:</strong> {book.location.letter}<br />
-                  <strong>מספר:</strong> {book.location.number}
+        <div className="p-6">
+          <div className="flex justify-between items-start mb-4">
+            <button
+              onClick={() => toggleFavorite(book.id)}
+              className={`p-3 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
+                } hover:scale-110 transition-transform`}
+            >
+              <Heart size={20} fill={favorites.has(book.id) ? 'white' : 'none'} />
+            </button>
+            <div className="text-right flex-1 mr-4">
+              <h2 className="text-2xl font-bold mb-2">{book.title}</h2>
+              <p className="text-lg text-gray-600 mb-2">{book.author}</p>
+              <div className="flex items-center justify-end mb-2">
+                <span className="text-sm text-gray-500 ml-2">דירוג:</span>
+                <div className="flex items-center">
+                  <Star className="text-yellow-400 fill-current mr-1" size={16} />
+                  <span className="font-medium">{book.rating}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="text-right">
-            <h4 className="font-semibold mb-2">תיאור הספר</h4>
-            <p className="text-gray-700 leading-relaxed">{book.description}</p>
+          {/* בקשות השאלה ממתינות - לאדמין */}
+          {user?.role === 'admin' && pendingRequests.length > 0 && (
+            <div className="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <h4 className="font-semibold text-yellow-800 mb-3 flex items-center gap-2">
+                <Bell className="w-5 h-5" />
+                בקשות השאלה ממתינות ({pendingRequests.length})
+              </h4>
+              <div className="space-y-3">
+                {pendingRequests.map(request => (
+                  <div key={request.id} className="bg-white rounded-lg p-3 border border-yellow-300">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-800">{request.requesterName}</div>
+                        <div className="text-sm text-gray-600">
+                          טלפון: {request.contactPhone}
+                        </div>
+                        {request.expectedReturnDate && (
+                          <div className="text-sm text-gray-600">
+                            החזרה משוערת: {new Date(request.expectedReturnDate).toLocaleDateString('he-IL')}
+                          </div>
+                        )}
+                        {request.notes && (
+                          <div className="text-sm text-gray-600 mt-1">
+                            הערות: {request.notes}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-500">
+                          נשלח: {new Date(request.createdAt).toLocaleDateString('he-IL')} {new Date(request.createdAt).toLocaleTimeString('he-IL')}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setSelectedRequest(request)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                          disabled={submitting}
+                        >
+                          טפל בבקשה
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* כפתור בקשת השאלה - רק למשתמשים רגילים ורק אם הספר זמין */}
+          {user?.role !== 'admin' && book.status === 'available' && !showLoanForm && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-green-700">זמין להשאלה</span>
+                </div>
+                <button
+                  onClick={() => setShowLoanForm(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white text-green-700 rounded-lg hover:bg-green-50 transition-all duration-200 border border-green-200 shadow-sm hover:shadow-md text-sm font-medium"
+                  disabled={submitting}
+                >
+                  <span className="text-base">📖</span>
+                  בקש השאלת ספר
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* טופס בקשת השאלה */}
+          {showLoanForm && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="font-semibold text-blue-800 mb-3">בקשת השאלת ספר</h4>
+              <form onSubmit={handleLoanRequest} className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    מספר טלפון ליצירת קשר *
+                  </label>
+                  <input
+                    type="tel"
+                    value={loanData.contactPhone}
+                    onChange={(e) => setLoanData(prev => ({ ...prev, contactPhone: e.target.value }))}
+                    className="w-full rounded-lg border border-blue-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="050-1234567"
+                    required
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    תאריך החזרה משוער (אופציונלי)
+                  </label>
+                  <input
+                    type="date"
+                    value={loanData.returnDate}
+                    onChange={(e) => setLoanData(prev => ({ ...prev, returnDate: e.target.value }))}
+                    className="w-full rounded-lg border border-blue-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    הערות נוספות (אופציונלי)
+                  </label>
+                  <textarea
+                    value={loanData.notes}
+                    onChange={(e) => setLoanData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full rounded-lg border border-blue-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    placeholder="למה אתה זקוק לספר? מתי תרצה לאסוף?"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={submitting || !loanData.contactPhone.trim()}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? 'שולח בקשה...' : 'שלח בקשה'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLoanForm(false)}
+                    disabled={submitting}
+                    className="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* אם הספר מושאל - הצגת מידע */}
+          {book.status === 'borrowed' && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span className="text-sm font-medium text-orange-700">כרגע מושאל</span>
+                </div>
+                <p className="text-xs text-orange-600">הספר יהיה זמין שוב כשיוחזר</p>
+                {book.borrowedBy && (
+                  <p className="text-xs text-orange-600 mt-1">מושאל ל: {book.borrowedBy}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* אם הספר בתחזוקה */}
+          {book.status === 'maintenance' && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl border border-red-200">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <span className="text-sm font-medium text-red-700">בתחזוקה</span>
+                </div>
+                <p className="text-xs text-red-600">הספר אינו זמין כעת להשאלה</p>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="text-right">
+                <h4 className="font-semibold mb-2 flex items-center justify-end">
+                  <FileText size={16} className="ml-2" />
+                  קטגוריה
+                </h4>
+                <span className={`px-3 py-1 rounded-full text-sm text-white bg-${getCategoryColor(book.category, categories)}-500`}>
+                  {categories.find(c => c.id === book.category)?.name}
+                </span>
+              </div>
+
+              <div className="text-right">
+                <h4 className="font-semibold mb-2 flex items-center justify-end">
+                  <MapPin size={16} className="ml-2" />
+                  מיקום בספרייה
+                </h4>
+                <div className="bg-gray-100 p-3 rounded">
+                  <div className="text-sm">
+                    <strong>צבע:</strong> {book.location.color}<br />
+                    <strong>אות:</strong> {book.location.letter}<br />
+                    <strong>מספר:</strong> {book.location.number}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <h4 className="font-semibold mb-2">תיאור הספר</h4>
+              <p className="text-gray-700 leading-relaxed">{book.description}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
-);
 
-// קומפוננט קטלוג ספרים
+      {/* חלון טיפול בבקשה - לאדמין */}
+      {selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold mb-4">טיפול בבקשת השאלה</h3>
+
+              <div className="space-y-3 mb-6">
+                <div><strong>ספר:</strong> {book.title}</div>
+                <div><strong>מבקש:</strong> {selectedRequest.requesterName}</div>
+                <div><strong>טלפון:</strong> {selectedRequest.contactPhone}</div>
+                {selectedRequest.expectedReturnDate && (
+                  <div><strong>החזרה משוערת:</strong> {new Date(selectedRequest.expectedReturnDate).toLocaleDateString('he-IL')}</div>
+                )}
+                {selectedRequest.notes && (
+                  <div><strong>הערות המבקש:</strong> {selectedRequest.notes}</div>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">הערות אדמין (אופציונלי)</label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="הערות לבקשה..."
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleUpdateRequestStatus(selectedRequest.id, 'approved')}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {submitting ? 'מעדכן...' : 'אשר השאלה'}
+                </button>
+                <button
+                  onClick={() => handleUpdateRequestStatus(selectedRequest.id, 'rejected')}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {submitting ? 'מעדכן...' : 'דחה בקשה'}
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedRequest(null);
+                    setAdminNotes('');
+                  }}
+                  disabled={submitting}
+                  className="px-4 py-2 border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 disabled:opacity-50"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -494,6 +728,10 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
   const [editingBook, setEditingBook] = useState(null);
   const [showBookEditor, setShowBookEditor] = useState(false);
 
+  // הוסף state לבקשות השאלה
+  const [loanRequests, setLoanRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
   // Initialize favorites from localStorage
   useEffect(() => {
     const savedFavorites = localStorage.getItem('libraryFavorites');
@@ -501,6 +739,26 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
       setFavorites(new Set(JSON.parse(savedFavorites)));
     }
   }, []);
+
+  // טעינת בקשות השאלה לאדמין
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      loadLoanRequests();
+    }
+  }, [user]);
+
+  const loadLoanRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const requests = await getLoanRequests();
+      setLoanRequests(requests);
+      console.log('בקשות השאלה נטענו לקטלוג:', requests.length);
+    } catch (error) {
+      console.error('שגיאה בטעינת בקשות השאלה:', error);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   // Save favorites to localStorage
   useEffect(() => {
@@ -525,6 +783,13 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
       newFavorites.add(bookId);
     }
     setFavorites(newFavorites);
+  };
+
+  // פונקציה לקבלת בקשות לספר מסוים
+  const getBookRequests = (bookId) => {
+    return loanRequests.filter(request =>
+      request.bookId === bookId && request.status === 'pending'
+    );
   };
 
   // עריכת ספר
@@ -583,6 +848,47 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
     }
   };
 
+  // טיפול בבקשת השאלה מהקטלוג
+  const handleLoanRequestFromCatalog = async (requestData) => {
+    // רענון הבקשות אחרי הוספת בקשה חדשה
+    if (user?.role === 'admin') {
+      setTimeout(() => {
+        loadLoanRequests();
+      }, 1000);
+    }
+  };
+
+  // עדכון סטטוס בקשה מהקטלוג
+  const handleUpdateRequestStatus = async (requestId, newStatus, bookId) => {
+    try {
+      await updateLoanRequestStatus(requestId, newStatus, '');
+
+      // עדכון סטטוס הספר אם מאשרים
+      if (newStatus === 'approved' && bookId) {
+        const request = loanRequests.find(r => r.id === requestId);
+        await updateBook(bookId, {
+          status: 'borrowed',
+          borrowedBy: request?.requesterName,
+          borrowDate: new Date().toISOString()
+        });
+
+        // עדכון רשימת הספרים
+        setBooks(prev => prev.map(book =>
+          book.id === bookId
+            ? { ...book, status: 'borrowed', borrowedBy: request?.requesterName }
+            : book
+        ));
+      }
+
+      // רענון הבקשות
+      await loadLoanRequests();
+
+    } catch (error) {
+      console.error('שגיאה בעדכון בקשה:', error);
+      alert('שגיאה בעדכון הבקשה: ' + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* כותרת וכפתורים */}
@@ -590,16 +896,29 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">קטלוג ספרים</h2>
           <p className="text-gray-600 mt-1">חפש וגלה ספרים בספריית שִׁלֹה</p>
+          {user?.role === 'admin' && loadingRequests && (
+            <p className="text-sm text-blue-600">טוען בקשות השאלה...</p>
+          )}
         </div>
         <div className="flex items-center gap-4">
           {user.role === 'admin' && (
-            <button
-              onClick={handleAddBook}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-            >
-              <Plus size={16} />
-              הוסף ספר חדש
-            </button>
+            <>
+              <button
+                onClick={handleAddBook}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+              >
+                <Plus size={16} />
+                הוסף ספר חדש
+              </button>
+              <button
+                onClick={loadLoanRequests}
+                disabled={loadingRequests}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={loadingRequests ? "animate-spin" : ""} />
+                רענן בקשות
+              </button>
+            </>
           )}
           <button
             onClick={() => setShowFavorites(!showFavorites)}
@@ -611,6 +930,18 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
           </button>
         </div>
       </div>
+
+      {/* אינדיקטור בקשות ממתינות לאדמין */}
+      {user?.role === 'admin' && loanRequests.filter(r => r.status === 'pending').length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-yellow-600" />
+            <span className="font-medium text-yellow-800">
+              יש {loanRequests.filter(r => r.status === 'pending').length} בקשות השאלה ממתינות לאישור
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* חיפוש */}
       <div className="relative">
@@ -674,6 +1005,9 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
                 onEditBook={handleEditBook}
                 onDeleteBook={handleDeleteBook}
                 categories={categories}
+                // הוסף נתוני בקשות לכרטיס
+                pendingRequests={user?.role === 'admin' ? getBookRequests(book.id) : []}
+                onUpdateRequestStatus={handleUpdateRequestStatus}
               />
             ))}
           </div>
@@ -697,6 +1031,10 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
           onEditBook={handleEditBook}
           onDeleteBook={handleDeleteBook}
           categories={categories}
+          onLoanRequest={handleLoanRequestFromCatalog}
+          // הוסף נתוני בקשות לחלון הפרטים
+          pendingRequests={user?.role === 'admin' ? getBookRequests(selectedBook.id) : []}
+          onUpdateRequestStatus={handleUpdateRequestStatus}
         />
       )}
 
@@ -716,7 +1054,408 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
     </div>
   );
 };
+// החלף את הקומפוננט BookCard הקיים שלך עם זה:
 
+const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
+  const hasRequests = pendingRequests.length > 0;
+
+  return (
+    <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden">
+      <div className="relative">
+        <img
+          src={book.image}
+          alt={book.title}
+          className="w-full h-48 object-cover"
+        />
+
+        {/* אינדיקטור בקשות השאלה לאדמין */}
+        {user?.role === 'admin' && hasRequests && (
+          <div className="absolute top-2 right-12 bg-red-500 text-white rounded-full min-w-[24px] h-6 flex items-center justify-center text-xs font-bold animate-pulse">
+            {pendingRequests.length}
+          </div>
+        )}
+
+        <button
+          onClick={() => toggleFavorite(book.id)}
+          className={`absolute top-2 right-2 p-2 rounded-full ${favorites.has(book.id) ? 'bg-red-500 text-white' : 'bg-white text-gray-600'
+            } hover:scale-110 transition-transform`}
+        >
+          <Heart size={16} fill={favorites.has(book.id) ? 'white' : 'none'} />
+        </button>
+
+        <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs text-white bg-${getCategoryColor(book.category, categories)}-500`}>
+          {categories.find(c => c.id === book.category)?.name}
+        </div>
+
+        <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-xs ${getStatusColor(book.status)}`}>
+          {getStatusText(book.status)}
+        </div>
+
+        {user?.role === 'admin' && (
+          <div className="absolute bottom-2 right-2 flex gap-1">
+            {hasRequests && (
+              <button
+                onClick={() => setSelectedBook(book)}
+                className="p-2 rounded-full bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+                title={`יש ${pendingRequests.length} בקשות השאלה`}
+              >
+                <Bell size={14} />
+              </button>
+            )}
+            <button
+              onClick={() => onEditBook(book)}
+              className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+              title="ערוך ספר"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              onClick={() => onDeleteBook(book.id)}
+              className="p-2 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
+              title="מחק ספר"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4">
+        <h3 className="font-bold text-lg mb-1 text-right">{book.title}</h3>
+        <p className="text-gray-600 mb-2 text-right flex items-center justify-end">
+          <User size={14} className="ml-1" />
+          {book.author}
+        </p>
+
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center">
+            <Star className="text-yellow-400 fill-current" size={14} />
+            <span className="text-sm text-gray-600 ml-1">{book.rating}</span>
+          </div>
+          <div className="flex items-center text-sm text-gray-500">
+            <MapPin size={14} className="ml-1" />
+            <span>{book.location.color} {book.location.letter}{book.location.number}</span>
+          </div>
+        </div>
+
+        {/* הצגת בקשות השאלה לאדמין */}
+        {user?.role === 'admin' && hasRequests && (
+          <div className="mb-3 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div className="text-xs text-yellow-800 font-medium">
+              🔔 {pendingRequests.length} בקשות השאלה ממתינות
+            </div>
+            <div className="text-xs text-yellow-700 mt-1">
+              {pendingRequests[0]?.requesterName}
+              {pendingRequests.length > 1 && ` ועוד ${pendingRequests.length - 1}`}
+            </div>
+          </div>
+        )}
+
+        <p className="text-gray-700 text-sm mb-3 text-right line-clamp-2">
+          {book.description}
+        </p>
+
+        <button
+          onClick={() => setSelectedBook(book)}
+          className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors flex items-center justify-center"
+        >
+          {user?.role === 'admin' && hasRequests ? 'צפה בפרטים ובקשות' : 'צפה בפרטים'}
+          <ArrowRight size={16} className="mr-2" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const LoanRequestsManagement = ({ currentUser }) => {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [adminNotes, setAdminNotes] = useState('');
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const loadRequests = async () => {
+    setLoading(true);
+    try {
+      const requestsData = await getLoanRequests();
+      setRequests(requestsData);
+      console.log('בקשות השאלה נטענו:', requestsData.length);
+    } catch (error) {
+      console.error('שגיאה בטעינת בקשות:', error);
+      alert('שגיאה בטעינת הבקשות: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async (requestId, newStatus, bookId = null) => {
+    setLoading(true);
+    try {
+      // עדכון סטטוס הבקשה
+      await updateLoanRequestStatus(requestId, newStatus, adminNotes);
+
+      // אם מאשרים - עדכון סטטוס הספר למושאל
+      if (newStatus === 'approved' && bookId) {
+        await updateBook(bookId, {
+          status: 'borrowed',
+          borrowedBy: requests.find(r => r.id === requestId)?.requesterName,
+          borrowDate: new Date().toISOString()
+        });
+      }
+
+      // אם מחזירים ספר - עדכון חזרה לזמין
+      if (newStatus === 'returned' && bookId) {
+        await updateBook(bookId, {
+          status: 'available',
+          borrowedBy: null,
+          borrowDate: null,
+          returnDate: new Date().toISOString()
+        });
+      }
+
+      // עדכון רשימת הבקשות
+      setRequests(prev => prev.map(req =>
+        req.id === requestId
+          ? { ...req, status: newStatus, adminNotes, updatedAt: new Date().toISOString() }
+          : req
+      ));
+
+      setSelectedRequest(null);
+      setAdminNotes('');
+      console.log(`בקשה ${requestId} עודכנה לסטטוס: ${newStatus}`);
+
+    } catch (error) {
+      console.error('שגיאה בעדכון בקשה:', error);
+      alert('שגיאה בעדכון הבקשה: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRequest = async (requestId) => {
+    if (confirm('האם אתה בטוח שברצונך למחוק את הבקשה?')) {
+      setLoading(true);
+      try {
+        await deleteLoanRequest(requestId);
+        setRequests(prev => prev.filter(req => req.id !== requestId));
+        console.log('בקשה נמחקה:', requestId);
+      } catch (error) {
+        console.error('שגיאה במחיקת בקשה:', error);
+        alert('שגיאה במחיקת הבקשה: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'approved': return 'bg-green-100 text-green-800 border-green-300';
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-300';
+      case 'returned': return 'bg-blue-100 text-blue-800 border-blue-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'pending': return 'ממתין לאישור';
+      case 'approved': return 'אושר - מושאל';
+      case 'rejected': return 'נדחה';
+      case 'returned': return 'הוחזר';
+      default: return 'לא ידוע';
+    }
+  };
+
+  const pendingRequests = requests.filter(req => req.status === 'pending');
+  const approvedRequests = requests.filter(req => req.status === 'approved');
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-stone-200 bg-white p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Book className="w-6 h-6 text-blue-600" />
+            <h2 className="text-2xl font-semibold">ניהול בקשות השאלה</h2>
+            {loading && <div className="text-sm text-blue-600">טוען...</div>}
+          </div>
+          <button
+            onClick={loadRequests}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            רענן
+          </button>
+        </div>
+
+        {/* סטטיסטיקות */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-4 border border-yellow-200">
+            <div className="text-2xl font-bold text-yellow-900">{pendingRequests.length}</div>
+            <div className="text-sm text-yellow-700">ממתינות לאישור</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+            <div className="text-2xl font-bold text-green-900">{approvedRequests.length}</div>
+            <div className="text-sm text-green-700">מושאלים כעת</div>
+          </div>
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+            <div className="text-2xl font-bold text-blue-900">{requests.length}</div>
+            <div className="text-sm text-blue-700">סה״כ בקשות</div>
+          </div>
+        </div>
+      </div>
+
+      {/* בקשות ממתינות */}
+      {pendingRequests.length > 0 && (
+        <div className="rounded-3xl border border-yellow-200 bg-yellow-50 p-6">
+          <h3 className="text-lg font-semibold text-yellow-800 mb-4">בקשות ממתינות לאישור</h3>
+          <div className="space-y-3">
+            {pendingRequests.map(request => (
+              <div key={request.id} className="bg-white rounded-xl p-4 border border-yellow-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h4 className="font-semibold text-lg">{request.bookTitle}</h4>
+                      <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(request.status)}`}>
+                        {getStatusText(request.status)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div><strong>מבקש:</strong> {request.requesterName}</div>
+                      <div><strong>טלפון:</strong> {request.contactPhone}</div>
+                      {request.expectedReturnDate && (
+                        <div><strong>תאריך החזרה משוער:</strong> {new Date(request.expectedReturnDate).toLocaleDateString('he-IL')}</div>
+                      )}
+                      {request.notes && (
+                        <div><strong>הערות:</strong> {request.notes}</div>
+                      )}
+                      <div><strong>תאריך בקשה:</strong> {new Date(request.createdAt).toLocaleDateString('he-IL')}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedRequest(request)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                      disabled={loading}
+                    >
+                      טפל בבקשה
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ספרים מושאלים כעת */}
+      {approvedRequests.length > 0 && (
+        <div className="rounded-3xl border border-green-200 bg-green-50 p-6">
+          <h3 className="text-lg font-semibold text-green-800 mb-4">ספרים מושאלים כעת</h3>
+          <div className="space-y-3">
+            {approvedRequests.map(request => (
+              <div key={request.id} className="bg-white rounded-xl p-4 border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h4 className="font-semibold text-lg">{request.bookTitle}</h4>
+                      <span className={`px-2 py-1 rounded text-xs border ${getStatusColor(request.status)}`}>
+                        {getStatusText(request.status)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div><strong>שואל:</strong> {request.requesterName} • {request.contactPhone}</div>
+                      <div><strong>תאריך אישור:</strong> {request.updatedAt ? new Date(request.updatedAt).toLocaleDateString('he-IL') : 'לא ידוע'}</div>
+                      {request.expectedReturnDate && (
+                        <div><strong>החזרה משוערת:</strong> {new Date(request.expectedReturnDate).toLocaleDateString('he-IL')}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpdateStatus(request.id, 'returned', request.bookId)}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                      disabled={loading}
+                    >
+                      סמן כהוחזר
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* חלון טיפול בבקשה */}
+      {selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold mb-4">טיפול בבקשת השאלה</h3>
+
+              <div className="space-y-3 mb-6">
+                <div><strong>ספר:</strong> {selectedRequest.bookTitle}</div>
+                <div><strong>מבקש:</strong> {selectedRequest.requesterName}</div>
+                <div><strong>טלפון:</strong> {selectedRequest.contactPhone}</div>
+                {selectedRequest.expectedReturnDate && (
+                  <div><strong>החזרה משוערת:</strong> {new Date(selectedRequest.expectedReturnDate).toLocaleDateString('he-IL')}</div>
+                )}
+                {selectedRequest.notes && (
+                  <div><strong>הערות המבקש:</strong> {selectedRequest.notes}</div>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">הערות אדמין (אופציונלי)</label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="הערות לבקשה..."
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleUpdateStatus(selectedRequest.id, 'approved', selectedRequest.bookId)}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {loading ? 'מעדכן...' : 'אשר השאלה'}
+                </button>
+                <button
+                  onClick={() => handleUpdateStatus(selectedRequest.id, 'rejected')}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {loading ? 'מעדכן...' : 'דחה בקשה'}
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedRequest(null);
+                    setAdminNotes('');
+                  }}
+                  disabled={loading}
+                  className="px-4 py-2 border border-stone-300 text-stone-700 rounded-lg hover:bg-stone-50 disabled:opacity-50"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 // ------------------------------------------------------
 // קומפוננטת ראשית עם לוח יהודי עברי בלבד + Firebase
 // ------------------------------------------------------
