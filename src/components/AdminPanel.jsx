@@ -32,19 +32,9 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
     useEffect(() => {
         loadStats();
     }, []);
-    {
-        activeTab === 'overview' && (
-            <div className="space-y-6">
-                {/* הסטטיסטיקות הקיימות */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* כל הסטטיסטיקות הקיימות */}
-                </div>
 
-                {/* הוספה חדשה - מצב Firebase */}
-                <FirebaseStatus />
-            </div>
-        )
-    }
+    // הסר את הקוד השגוי שהיה כאן (שורות 45-52 במקור)
+
     // מעקב אחר שינויים בזמן אמת
     useEffect(() => {
         const unsubscribeUsers = subscribeToCollection('users', (usersData) => {
@@ -417,35 +407,40 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
             )}
 
             {activeTab === 'overview' && (
-                <div className="rounded-3xl border border-stone-200 bg-white p-5">
-                    <h3 className="font-medium mb-4">סיכום פעילות המערכת</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h4 className="font-medium mb-2">משתמשים פעילים</h4>
-                            <div className="text-sm text-gray-600">
-                                {loading ? (
-                                    <div>טוען נתונים...</div>
-                                ) : (
-                                    <>
-                                        <div>מנהלים: {stats.admins}</div>
-                                        <div>משתמשים רגילים: {stats.regularUsers}</div>
-                                        <div>לא פעילים: {stats.users - stats.activeUsers}</div>
-                                    </>
-                                )}
+                <div className="space-y-6">
+                    {/* הוסף FirebaseStatus */}
+                    <FirebaseStatus />
+
+                    <div className="rounded-3xl border border-stone-200 bg-white p-5">
+                        <h3 className="font-medium mb-4">סיכום פעילות המערכת</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-medium mb-2">משתמשים פעילים</h4>
+                                <div className="text-sm text-gray-600">
+                                    {loading ? (
+                                        <div>טוען נתונים...</div>
+                                    ) : (
+                                        <>
+                                            <div>מנהלים: {stats.admins}</div>
+                                            <div>משתמשים רגילים: {stats.regularUsers}</div>
+                                            <div>לא פעילים: {stats.users - stats.activeUsers}</div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h4 className="font-medium mb-2">תוכן המערכת</h4>
-                            <div className="text-sm text-gray-600">
-                                {loading ? (
-                                    <div>טוען נתונים...</div>
-                                ) : (
-                                    <>
-                                        <div>קטגוריות ספרים: {stats.categories}</div>
-                                        <div>ספרים בקטלוג: {stats.books}</div>
-                                        <div>אירועים פעילים: {stats.events}</div>
-                                    </>
-                                )}
+                            <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-medium mb-2">תוכן המערכת</h4>
+                                <div className="text-sm text-gray-600">
+                                    {loading ? (
+                                        <div>טוען נתונים...</div>
+                                    ) : (
+                                        <>
+                                            <div>קטגוריות ספרים: {stats.categories}</div>
+                                            <div>ספרים בקטלוג: {stats.books}</div>
+                                            <div>אירועים פעילים: {stats.events}</div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -197,8 +197,8 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                 {announcements.length > 0 && currentAnnouncement && (
                     <div className="mt-3">
                         <div className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-500 ${currentAnnouncement.type === 'warning' ? 'bg-yellow-100 border border-yellow-300' :
-                                currentAnnouncement.type === 'success' ? 'bg-green-100 border border-green-300' :
-                                    'bg-blue-100 border border-blue-300'
+                            currentAnnouncement.type === 'success' ? 'bg-green-100 border border-green-300' :
+                                'bg-blue-100 border border-blue-300'
                             }`}>
                             <div className="flex items-center gap-3 flex-1">
                                 <div className="flex-1">

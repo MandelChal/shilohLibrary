@@ -7,6 +7,7 @@ import Navigation from './components/Navigation';
 import SystemAnnouncements from './components/SystemAnnouncements';
 import AdminPanel from './components/AdminPanel';
 import { Bell, RefreshCw } from 'lucide-react';
+
 // Utils - עבודה עברית בלבד
 import {
   fmtHebDay,
@@ -59,7 +60,7 @@ import {
 // Firebase config
 import { db, isFirebaseEnabled } from './utils/firebase';
 
-// נתוני ספרים להדוגמה - יעמסו מ-Firebase או יישארו כ-fallback
+// נתוני ספרים להדגמה - יעמסו מ-Firebase או יישארו כ-fallback
 const initialBooks = [
   {
     id: '1',
@@ -314,7 +315,6 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
     </div>
   );
 };
-
 
 // עדכן את BookDetail להוסיף ניהול בקשות לאדמין
 const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
@@ -1032,7 +1032,7 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
           onDeleteBook={handleDeleteBook}
           categories={categories}
           onLoanRequest={handleLoanRequestFromCatalog}
-          // הוסף נתוני בקשות לחלון הפרטים
+          // הוסף נתוני בקשות לחלון הפרטי
           pendingRequests={user?.role === 'admin' ? getBookRequests(selectedBook.id) : []}
           onUpdateRequestStatus={handleUpdateRequestStatus}
         />
@@ -1054,8 +1054,8 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
     </div>
   );
 };
-// החלף את הקומפוננט BookCard הקיים שלך עם זה:
 
+// החלף את הקומפוננט BookCard הקיים שלך עם זה:
 const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
   const hasRequests = pendingRequests.length > 0;
 
@@ -1276,6 +1276,7 @@ const LoanRequestsManagement = ({ currentUser }) => {
 
   return (
     <div className="space-y-6">
+      {/* כותרת וסטטיסטיקות */}
       <div className="rounded-3xl border border-stone-200 bg-white p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -1457,7 +1458,7 @@ const LoanRequestsManagement = ({ currentUser }) => {
   );
 };
 // ------------------------------------------------------
-// קומפוננטת ראשית עם לוח יהודי עברי בלבד + Firebase
+// קומפוננטה ראשית עם לוח יהודי עברי בלבד + Firebase
 // ------------------------------------------------------
 export default function LibrarySystem() {
   const [user, setUser] = useState(null);
@@ -1480,7 +1481,7 @@ export default function LibrarySystem() {
   useEffect(() => {
     const initializeData = async () => {
       try {
-        // אתחול נתונים ברירת מחדל אם צריך
+        // אתחול נתונים בריריות מחדל אם צריך
         await initializeDefaultData();
 
         // טעינת נתונים
@@ -1504,7 +1505,7 @@ export default function LibrarySystem() {
           {
             id: "1",
             title: "ברוכים הבאים למערכת החדשה!",
-            message: "המערכת הושדרה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים + קטלוג ספרים דיגיטלי",
+            message: "המערכת מושדרה עם לוח שנה עברי מלא וחגים יהודיים אוטומטיים + קטלוג ספרים דיגיטלי",
             type: "success",
             createdAt: new Date().toISOString(),
             createdBy: "מנהל המערכת"
@@ -2157,7 +2158,7 @@ export default function LibrarySystem() {
       )}
 
       <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-sm text-stone-500">
-        מערכת ספריית שילה • נבנה ב-React + Firebase • לוח שנה יהודי אוטומטי עם @hebcal/core • ניהול הרשאות מתקדם
+        מערכת ספרייתֿ שילה • נבנה ב-React + Firebase • לוח שנה יהודי אוטומטי עם @hebcal/core • ניהול הרשאות מתקדם
       </footer>
     </div>
   );
