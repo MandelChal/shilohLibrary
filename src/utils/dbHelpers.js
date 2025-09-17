@@ -534,7 +534,7 @@ export const addLoanRequest = async (requestData) => {
     }
 };
 
-// **עדכון מרכזי - פונקציה שמשלחת הודעה אוטומטית**
+// עדכון הפונקציה updateLoanRequestStatus לתמיכה בסטטוסים חדשים
 export const updateLoanRequestStatus = async (requestId, newStatus, adminNotes = '') => {
     if (!isFirebaseEnabled) {
         const requests = await getLoanRequests();
@@ -609,24 +609,32 @@ export const getNotifications = async (userId) => {
     }
 
     try {
+        // שינוי: לא נשתמש ב-orderBy כדי להימנע משגיאות האינדקס
         const q = query(
             collection(db, 'notifications'),
-            where('userId', '==', userId),
-            orderBy('createdAt', 'desc')
+            where('userId', '==', userId)
         );
         const querySnapshot = await getDocs(q);
         const notifications = [];
         querySnapshot.forEach((doc) => {
-            notifications.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            notifications.push({
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+            });
         });
-        return notifications;
+        // מיון בצד הלקוח במקום ב-Firebase
+        return notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } catch (error) {
         console.error('שגיאה בטעינת הודעות:', error);
+        // fallback ל-localStorage אם Firebase נכשל
         const saved = localStorage.getItem('libraryNotifications');
         const allNotifications = saved ? JSON.parse(saved) : [];
         return allNotifications.filter(n => n.userId === userId);
     }
 };
+
 
 // הוספת הודעה חדשה
 export const addNotification = async (notificationData) => {
@@ -698,54 +706,286 @@ export const deleteNotification = async (notificationId) => {
         throw error;
     }
 };
+export const notifyAdminReturnRequest = async (returnData) => {
+    try {
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
 
-// שליחת הודעה אוטומטית לעדכון בקשת השאלה
-export const sendLoanRequestNotification = async (userId, requestData, newStatus, adminNotes = '') => {
+        const message = `בקשת החזרת ספר חדשה:
+
+ספר: "${returnData.bookTitle}"
+מחזיר: ${returnData.requesterName}
+תאריך בקשת החזרה: ${new Date().toLocaleDateString('he-IL')}
+
+יש לבדוק ולאשר את החזרת הספר במערכת הניהול.`;
+
+        for (const admin of admins) {
+            const notificationData = {
+                userId: admin.id,
+                title: 'בקשת החזרת ספר חדשה',
+                message,
+                type: 'info',
+                relatedId: returnData.loanRequestId,
+                relatedType: 'return_request',
+                bookTitle: returnData.bookTitle,
+                bookId: returnData.bookId,
+                createdAt: new Date().toISOString(),
+                isRead: false
+            };
+
+            await addNotification(notificationData);
+        }
+
+        console.log(`הודעה על בקשת החזרה נשלחה ל-${admins.length} מנהלים`);
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעה למנהלים:', error);
+    }
+};
+// עדכון הפונקציה sendLoanRequestNotification לתמיכה בהחזרה
+export const sendLoanRequestNotification = async (userId, requestData, newStatus, adminNotes = '', returnDate = null) => {
     let title, message, type;
+
+    const getReturnDate = () => {
+        if (returnDate) return returnDate;
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 14);
+        return futureDate.toLocaleDateString('he-IL');
+    };
+
+    const getBookLocation = () => {
+        if (requestData.bookLocation) {
+            return `${requestData.bookLocation.color} ${requestData.bookLocation.letter}${requestData.bookLocation.number}`;
+        }
+        return 'פנה לספרן לקבלת המיקום';
+    };
 
     switch (newStatus) {
         case 'approved':
-            title = 'בקשת השאלה אושרה! 📚';
-            message = `בקשתך לספר "${requestData.bookTitle}" אושרה. הספר מוכן לאיסוף. ${adminNotes ? `הערת האדמין: ${adminNotes}` : ''}`;
+            title = `${requestData.requesterName}, הספר "${requestData.bookTitle}" אושר להשאלה!`;
+            message = `הספר אושר להשאלה עד תאריך ${getReturnDate()}
+      
+מיקום הספר: ${getBookLocation()}
+פנה לספרן עם תעודת זהות לאיסוף
+
+${adminNotes ? `הערת הספרן: ${adminNotes}` : 'בהצלחה בלימודים!'}`;
             type = 'success';
+
+            // הוספת אירוע החזרה ללוח השנה
+            try {
+                const returnEventDate = new Date();
+                returnEventDate.setDate(returnEventDate.getDate() + 14);
+
+                const eventData = {
+                    title: `החזרת ספר: ${requestData.bookTitle}`,
+                    description: `מועד החזרה של הספר "${requestData.bookTitle}" לספרייית שילה`,
+                    date: returnEventDate.toISOString(),
+                    time: '18:00',
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'מערכת הודעות',
+                    type: 'book_return',
+                    bookId: requestData.bookId,
+                    userId: userId,
+                    loanRequestId: requestData.id
+                };
+
+                await addEvent(eventData);
+                console.log('אירוע החזרת ספר נוסף ללוח השנה');
+            } catch (error) {
+                console.error('שגיאה בהוספת אירוע ללוח שנה:', error);
+            }
             break;
+
         case 'rejected':
-            title = 'בקשת השאלה נדחתה';
-            message = `בקשתך לספר "${requestData.bookTitle}" נדחתה. ${adminNotes ? `סיבה: ${adminNotes}` : 'ניתן לפנות לספרן לפרטים נוספים.'}`;
+            title = `${requestData.requesterName}, בקשת ההשאלה נדחתה`;
+            message = `הבקשה לספר "${requestData.bookTitle}" נדחתה.
+
+${adminNotes ? `סיבת הדחיה: ${adminNotes}` : 'יייתכן שהספר כבר מושאל או בתחזוקה.'}
+
+ניתן לפנות לספרן לקבלת מידע נוסף או לבקש ספר חלופי.`;
             type = 'error';
             break;
+
         case 'returned':
-            title = 'ספר הוחזר בהצלחה';
-            message = `הספר "${requestData.bookTitle}" הוחזר בהצלחה. תודה שהשתמשת בספריה! ${adminNotes ? `הערת האדמין: ${adminNotes}` : ''}`;
+            title = `${requestData.requesterName}, הספר הוחזר בהצלחה`;
+            message = `הספר "${requestData.bookTitle}" הוחזר בהצלחה לספרייית שילה.
+
+תודה שהשתמשת בשירותי הספרייה!
+${adminNotes ? `הערת הספרן: ${adminNotes}` : ''}`;
             type = 'success';
             break;
+
+        case 'pending_return':
+            title = `${requestData.requesterName}, בקשת החזרה התקבלה`;
+            message = `בקשת החזרה לספר "${requestData.bookTitle}" התקבלה במערכת.
+
+הספרן יבדוק את הבקשה ויאשר את החזרת הספר בהקדם.
+תקבל הודעה כאשר החזרה תאושר.`;
+            type = 'info';
+            break;
+
         default:
             return;
     }
 
     try {
-        await addNotification({
+        const notificationData = {
             userId,
             title,
             message,
             type,
             relatedId: requestData.id || null,
-            relatedType: 'loan_request'
-        });
-        console.log(`הודעה נשלחה למשתמש ${userId} בנושא ${title}`);
+            relatedType: 'loan_request',
+            bookTitle: requestData.bookTitle,
+            bookId: requestData.bookId,
+            createdAt: new Date().toISOString(),
+            isRead: false
+        };
+
+        await addNotification(notificationData);
+        console.log(`הודעה נשלחה למשתמש ${requestData.requesterName}: ${title}`);
     } catch (error) {
         console.error('שגיאה בשליחת הודעה:', error);
+        console.log(`הודעה (לא נשמרה): ${title} - ${message}`);
     }
 };
 
-// קבלת מספר הודעות לא נקראות
-export const getUnreadNotificationsCount = async (userId) => {
-    const notifications = await getNotifications(userId);
-    return notifications.filter(n => !n.isRead).length;
+// 📄 dbHelpers.js
+
+export const getUserBorrowedBooks = async (userId) => {
+    if (!isFirebaseEnabled) {
+        const saved = localStorage.getItem('libraryLoanRequests');
+        const allRequests = saved ? JSON.parse(saved) : [];
+
+        const borrowed = allRequests.filter(req =>
+            req.requesterId === userId &&
+            (req.status === 'approved' || req.status === 'pending_return')
+        );
+
+        // ✨ סינון כפילויות לפי bookId
+        const uniqueBorrowed = borrowed.filter(
+            (req, index, self) =>
+                index === self.findIndex(r => r.bookId === req.bookId)
+        );
+
+        return uniqueBorrowed;
+    }
+
+    try {
+        const q = query(
+            collection(db, 'loanRequests'),
+            where('requesterId', '==', userId),
+            where('status', 'in', ['approved', 'pending_return'])
+        );
+        const querySnapshot = await getDocs(q);
+
+        const borrowedBooks = [];
+        querySnapshot.forEach((doc) => {
+            borrowedBooks.push({ id: doc.id, ...doc.data() });
+        });
+
+        // ✨ סינון כפילויות לפי bookId
+        const uniqueBorrowed = borrowedBooks.filter(
+            (req, index, self) =>
+                index === self.findIndex(r => r.bookId === req.bookId)
+        );
+
+        return uniqueBorrowed;
+    } catch (error) {
+        console.error('שגיאה בטעינת ספרים מושאלים:', error);
+        return [];
+    }
+};
+
+
+// פונקציה חדשה להחזרת ספר על ידי המשתמש
+export const returnBookByUser = async (loanRequestId, bookId, userId) => {
+    try {
+        // עדכון סטטוס הבקשה ל-returned
+        await updateLoanRequestStatus(loanRequestId, 'returned', 'הוחזר על ידי המשתמש באפליקציה');
+
+        // עדכון סטטוס הספר לזמין
+        await updateBook(bookId, {
+            status: 'available',
+            borrowedBy: null,
+            borrowDate: null,
+            returnDate: new Date().toISOString()
+        });
+
+        // מחיקת אירוע החזרה מהלוח שנה
+        const events = await getEvents();
+        const returnEvent = events.find(event =>
+            event.type === 'book_return' &&
+            event.bookId === bookId &&
+            event.userId === userId
+        );
+
+        if (returnEvent) {
+            await deleteEvent(returnEvent.id);
+            console.log('אירוע החזרת הספר נמחק מהלוח שנה');
+        }
+
+        console.log('הספר הוחזר בהצלחה');
+        return true;
+    } catch (error) {
+        console.error('שגיאה בהחזרת ספר:', error);
+        throw error;
+    }
+};
+
+// פונקציה פשוטה למנהלים
+export const notifyAdminNewRequest = async (requestData) => {
+    try {
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        const message = `בקשה חדשה להשאלת ספר:
+
+ספר: "${requestData.bookTitle}"
+מבקש: ${requestData.requesterName}
+טלפון: ${requestData.contactPhone}
+${requestData.expectedReturnDate ? `החזרה מתוכננת: ${new Date(requestData.expectedReturnDate).toLocaleDateString('he-IL')}` : ''}
+${requestData.notes ? `הערות: ${requestData.notes}` : ''}`;
+
+        for (const admin of admins) {
+            const notificationData = {
+                userId: admin.id,
+                title: 'בקשת השאלה חדשה ממתינה',
+                message,
+                type: 'info',
+                relatedId: requestData.id,
+                relatedType: 'new_loan_request',
+                createdAt: new Date().toISOString(),
+                isRead: false
+            };
+
+            await addNotification(notificationData);
+        }
+
+        console.log(`הודעה על בקשה חדשה נשלחה ל-${admins.length} מנהלים`);
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעה למנהלים:', error);
+    }
+};
+
+
+// פונקציה חדשה לשליחת תזכורות החזרת ספרים
+export const sendReturnReminder = async (userId, loanData, daysUntilReturn) => {
+    const message = daysUntilReturn <= 0
+        ? `הספר "${loanData.bookTitle}" אמור היה להיות מוחזר. אנא החזר בהקדם.`
+        : `הספר "${loanData.bookTitle}" אמור להיות מוחזר בעוד ${daysUntilReturn} ימים.`;
+
+    await addNotification({
+        userId,
+        title: 'תזכורת החזרת ספר',
+        message,
+        type: 'warning',
+        relatedId: loanData.id,
+        relatedType: 'return_reminder'
+    });
 };
 
 // ------------------------------------------------------
-// 🔄 פונקציות עזר
+// 📄 פונקציות עזר
 // ------------------------------------------------------
 
 export const subscribeToCollection = (collectionName, callback) => {
@@ -774,7 +1014,7 @@ export const initializeDefaultData = async () => {
 
         const existingUsers = await getUsers();
         if (existingUsers.length === 0) {
-            console.log('יוצר משתמשי ברירת מחדל...');
+            console.log('יוצר משתמשים ברירת מחדל...');
 
             const defaultUsers = [
                 {
@@ -800,7 +1040,7 @@ export const initializeDefaultData = async () => {
             for (const user of defaultUsers) {
                 await addUser(user);
             }
-            console.log('משתמשי ברירת מחדל נוצרו בהצלחה');
+            console.log('משתמשים ברירת מחדל נוצרו בהצלחה');
         }
 
         const existingCategories = await getCategories();
@@ -831,3 +1071,14 @@ export const initializeDefaultData = async () => {
         console.error('שגיאה באתחול נתונים:', error);
     }
 };
+// קבלת מספר הודעות לא נקראות
+export const getUnreadNotificationsCount = async (userId) => {
+    try {
+        const notifications = await getNotifications(userId);
+        return notifications.filter(n => !n.isRead).length;
+    } catch (error) {
+        console.error('שגיאה בספירת הודעות לא נקראות:', error);
+        return 0;
+    }
+};
+

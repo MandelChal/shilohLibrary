@@ -1,7 +1,3 @@
-// ------------------------------------------------------
-// 🗓️ עזרי תאריכון – לוח עברי עם חגים יהודיים אוטומטיים
-// ------------------------------------------------------
-
 import { HDate, HebrewCalendar, Event, greg, months } from '@hebcal/core';
 
 export const fmtHebDay = new Intl.DateTimeFormat("he-u-ca-hebrew", { day: "numeric" });
@@ -13,7 +9,7 @@ export const fmtHebFull = new Intl.DateTimeFormat("he-u-ca-hebrew", { dateStyle:
 export const fmtGregShort = new Intl.DateTimeFormat("he-IL", { day: "numeric" });
 
 export function toISODateKey(d) {
-    const y = d.getFullYear();
+    const y = d.getFullYear().HebrewCalendar;
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
@@ -60,7 +56,7 @@ export function monthMatrix(anchor) {
 }
 
 // ------------------------------------------------------
-// 🕍 פונקציות חישוב זמנים יהודיים אוטומטיים
+// 🕯️ פונקציות חישוב זמנים יהודיים אוטומטיים - מתוקנות
 // ------------------------------------------------------
 
 const defaultLocation = {
@@ -74,7 +70,7 @@ const defaultLocation = {
 export const holidayTypesHebrew = {
     major: {
         color: 'bg-purple-100 border-purple-300 text-purple-800',
-        icon: '🕍',
+        icon: '🕯',
         name: 'חג עיקרי'
     },
     minor: {

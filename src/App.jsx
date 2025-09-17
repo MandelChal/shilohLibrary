@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { User, Settings, Calendar, LogOut, Trash2, Book, Search, Heart, MapPin, Filter, ArrowRight, Star, FileText, X, Plus, Edit2, Save, AlertCircle } from "lucide-react";
+import { User, Settings, Calendar, LogOut, Trash2, Book, Search, Heart, MapPin, Filter, ArrowRight, Star, FileText, X, Plus, Edit2, Save, AlertCircle, BookOpen, RotateCcw } from "lucide-react";
 
 // Components
 import LoginScreen from './components/LoginScreen';
@@ -7,6 +7,12 @@ import Navigation from './components/Navigation';
 import SystemAnnouncements from './components/SystemAnnouncements';
 import AdminPanel from './components/AdminPanel';
 import { Bell, RefreshCw } from 'lucide-react';
+import NotificationCenter from './components/NotificationCenter';
+import BorrowedBooks from './components/BorrowedBooks';
+import ReturnRequestsManagement from './components/ReturnRequestsManagement';
+
+
+
 
 // Utils - עבודה עברית בלבד
 import {
@@ -54,37 +60,15 @@ import {
   addLoanRequest,
   getLoanRequests,
   updateLoanRequestStatus,
-  deleteLoanRequest
+  deleteLoanRequest,
+  sendLoanRequestNotification, // ← הוסף את זה
+  notifyAdminNewRequest
 } from './utils/dbHelpers';
 
 // Firebase config
 import { db, isFirebaseEnabled } from './utils/firebase';
 
-// נתוני ספרים להדגמה - יעמסו מ-Firebase או יישארו כ-fallback
-const initialBooks = [
-  {
-    id: '1',
-    title: 'חומש רש"י',
-    author: 'רש"י',
-    category: 'torah',
-    location: { color: 'כחול', letter: 'א', number: '15' },
-    description: 'פירוש רש"י המפורסם על התורה עם הערות והסברים מקיפים',
-    image: '/api/placeholder/200/250',
-    rating: 4.8,
-    status: 'available'
-  },
-  {
-    id: '2',
-    title: 'משנה ברורה',
-    author: 'החפץ חיים',
-    category: 'halacha',
-    location: { color: 'אדום', letter: 'ב', number: '23' },
-    description: 'פירוש מקיף על שולחן ערוך אורח חיים',
-    image: '/api/placeholder/200/250',
-    rating: 4.9,
-    status: 'borrowed'
-  }
-];
+
 
 // קטגוריות ספרים - יעמסו מ-Firebase או יישארו כ-fallback
 const initialCategories = [
@@ -104,56 +88,82 @@ const getStatusColor = (status) => {
   switch (status) {
     case 'available': return 'text-green-600 bg-green-100';
     case 'borrowed': return 'text-orange-600 bg-orange-100';
+    case 'processing': return 'text-blue-600 bg-blue-100'; // חדש
     case 'maintenance': return 'text-red-600 bg-red-100';
     default: return 'text-gray-600 bg-gray-100';
   }
 };
 
+
 const getStatusText = (status) => {
   switch (status) {
     case 'available': return 'זמין';
     case 'borrowed': return 'מושאל';
+    case 'processing': return 'בעיבוד'; // חדש
     case 'maintenance': return 'תחזוקה';
     default: return 'לא ידוע';
   }
 };
 
+
 const getCategoryColor = (category, categories) => {
   const cat = categories.find(c => c.id === category);
   return cat ? cat.color : 'gray';
 };
-
-// קומפוננט עריכת ספר
-const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) => {
+export const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
+  const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState(book || {
     title: '',
     author: '',
-    category: '',
     location: { color: '', letter: '', number: '' },
     description: '',
     image: '/api/placeholder/200/250',
     rating: 4.0,
-    status: 'available'
+    status: 'available',
+    category: ''
   });
 
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  // טעינת קטגוריות מה־DB
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const data = await getCategories();
+        setCategories(data);
+      } catch (err) {
+        console.error('שגיאה בטעינת קטגוריות', err);
+      }
+    };
+    loadCategories();
+  }, []);
 
   const validateForm = () => {
     const newErrors = {};
     if (!formData.title?.trim()) newErrors.title = 'שם הספר נדרש';
     if (!formData.author?.trim()) newErrors.author = 'שם המחבר נדרש';
-    if (!formData.category) newErrors.category = 'קטגוריה נדרשת';
     if (!formData.location?.color?.trim()) newErrors.locationColor = 'צבע נדרש';
     if (!formData.location?.letter?.trim()) newErrors.locationLetter = 'אות נדרשת';
     if (!formData.location?.number?.trim()) newErrors.locationNumber = 'מספר נדרש';
+    if (!formData.category) newErrors.category = 'קטגוריה נדרשת';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (validateForm()) {
-      onSave(formData);
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    setSaving(true);
+    try {
+      await onSave(formData);
+      console.log('ספר נשמר בהצלחה');
+    } catch (error) {
+      console.error('שגיאה בשמירת ספר:', error);
+      alert('שגיאה בשמירת הספר: ' + error.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -176,6 +186,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
           </h2>
 
           <div className="space-y-4">
+            {/* שם הספר + מחבר */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2 text-right">שם הספר</label>
@@ -185,6 +196,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   className={`w-full p-2 border rounded text-right ${errors.title ? 'border-red-500' : 'border-gray-300'}`}
                   placeholder="הכנס שם הספר"
+                  disabled={saving}
                 />
                 {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
               </div>
@@ -197,41 +209,48 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                   onChange={(e) => setFormData(prev => ({ ...prev, author: e.target.value }))}
                   className={`w-full p-2 border rounded text-right ${errors.author ? 'border-red-500' : 'border-gray-300'}`}
                   placeholder="הכנס שם המחבר"
+                  disabled={saving}
                 />
                 {errors.author && <p className="text-red-500 text-xs mt-1">{errors.author}</p>}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-right">קטגוריה</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                  className={`w-full p-2 border rounded text-right ${errors.category ? 'border-red-500' : 'border-gray-300'}`}
-                >
-                  <option value="">בחר קטגוריה</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-                {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2 text-right">סטטוס</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full p-2 border border-gray-300 rounded text-right"
-                >
-                  <option value="available">זמין</option>
-                  <option value="borrowed">מושאל</option>
-                  <option value="maintenance">תחזוקה</option>
-                </select>
-              </div>
+            {/* סטטוס */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">סטטוס</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                className="w-full p-2 border border-gray-300 rounded text-right"
+                disabled={saving}
+              >
+                <option value="available">זמין</option>
+                <option value="processing">בעיבוד</option>
+                <option value="borrowed">מושאל</option>
+                <option value="maintenance">תחזוקה</option>
+              </select>
             </div>
 
+            {/* קטגוריה */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-right">קטגוריה</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                className="w-full p-2 border border-gray-300 rounded text-right"
+                disabled={saving}
+              >
+                <option value="">בחר קטגוריה</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
+            </div>
+
+            {/* מיקום בספרייה */}
             <div>
               <label className="block text-sm font-medium mb-2 text-right">מיקום בספרייה</label>
               <div className="grid grid-cols-3 gap-2">
@@ -242,6 +261,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                     onChange={(e) => updateLocation('color', e.target.value)}
                     className={`w-full p-2 border rounded text-right ${errors.locationColor ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="צבע"
+                    disabled={saving}
                   />
                   {errors.locationColor && <p className="text-red-500 text-xs mt-1">{errors.locationColor}</p>}
                 </div>
@@ -252,6 +272,7 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                     onChange={(e) => updateLocation('letter', e.target.value)}
                     className={`w-full p-2 border rounded text-right ${errors.locationLetter ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="אות"
+                    disabled={saving}
                   />
                   {errors.locationLetter && <p className="text-red-500 text-xs mt-1">{errors.locationLetter}</p>}
                 </div>
@@ -262,12 +283,14 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                     onChange={(e) => updateLocation('number', e.target.value)}
                     className={`w-full p-2 border rounded text-right ${errors.locationNumber ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="מספר"
+                    disabled={saving}
                   />
                   {errors.locationNumber && <p className="text-red-500 text-xs mt-1">{errors.locationNumber}</p>}
                 </div>
               </div>
             </div>
 
+            {/* דירוג */}
             <div>
               <label className="block text-sm font-medium mb-2 text-right">דירוג</label>
               <input
@@ -278,9 +301,11 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                 value={formData.rating}
                 onChange={(e) => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) }))}
                 className="w-full p-2 border border-gray-300 rounded text-right"
+                disabled={saving}
               />
             </div>
 
+            {/* תיאור */}
             <div>
               <label className="block text-sm font-medium mb-2 text-right">תיאור</label>
               <textarea
@@ -289,26 +314,45 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
                 className="w-full p-2 border border-gray-300 rounded text-right"
                 rows="4"
                 placeholder="תיאור הספר"
+                disabled={saving}
               />
             </div>
 
+            {/* כפתורים */}
             <div className="flex gap-4 pt-4">
               <button
                 type="button"
                 onClick={onCancel}
-                className="flex-1 py-2 px-4 border border-gray-300 rounded hover:bg-gray-50"
+                className="flex-1 py-2 px-4 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                disabled={saving}
               >
                 ביטול
               </button>
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600"
+                className="flex-1 py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={saving || Object.keys(errors).length > 0}
               >
                 <Save size={16} className="inline mr-2" />
-                שמור
+                {saving ? (isNew ? 'מוסיף...' : 'שומר...') : 'שמור'}
               </button>
             </div>
+
+            {/* שגיאות */}
+            {Object.keys(errors).length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="text-red-800">
+                  <div className="font-medium text-sm">יש לתקן את השגיאות הבאות:</div>
+                  <ul className="text-xs mt-1 space-y-0.5">
+                    {Object.entries(errors).map(([field, error]) => (
+                      <li key={field}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -316,7 +360,8 @@ const BookEditor = ({ book, onSave, onCancel, isNew = false, categories = [] }) 
   );
 };
 
-// עדכן את BookDetail להוסיף ניהול בקשות לאדמין
+
+
 const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [loanData, setLoanData] = useState({
@@ -327,7 +372,6 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
   const [submitting, setSubmitting] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [adminNotes, setAdminNotes] = useState('');
-
   const handleLoanRequest = async (e) => {
     e.preventDefault();
 
@@ -341,6 +385,8 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
       const requestData = {
         bookId: book.id,
         bookTitle: book.title,
+        bookAuthor: book.author,
+        bookLocation: book.location,
         requesterId: user.id || user.username,
         requesterName: user.name,
         contactPhone: loanData.contactPhone.trim(),
@@ -349,9 +395,29 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
         status: 'pending'
       };
 
+      // הוספת הבקשה למסד הנתונים
       await addLoanRequest(requestData);
 
-      alert('בקשתך נשלחה בהצלחה! האדמין יבדוק אותה ויחזור אליך.');
+      // עדכון סטטוס הספר ל"בעיבוד" ברגע שמגישים בקשה
+      await updateBook(book.id, {
+        status: 'processing',
+        processingBy: user.name,
+        processingDate: new Date().toISOString()
+      });
+
+      // שליחת הודעה למנהלים
+      await notifyAdminNewRequest(requestData);
+
+      alert(`בקשתך נשלחה בהצלחה!
+    
+פרטי הבקשה:
+• ספר: ${book.title}
+• מבקש: ${user.name}
+• טלפון: ${loanData.contactPhone}
+
+הספר מועבר כעת לסטטוס "בעיבוד".
+הנהלת הספרייה תבדוק את הבקשה ותחזור אליך בהקדם.`);
+
       setShowLoanForm(false);
       setLoanData({ contactPhone: '', notes: '', returnDate: '' });
 
@@ -371,10 +437,23 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
       // אם מאשרים - עדכון סטטוס הספר למושאל
       if (newStatus === 'approved') {
         const request = pendingRequests.find(r => r.id === requestId);
+        const returnDate = new Date();
+        returnDate.setDate(returnDate.getDate() + 14); // 14 ימים להשאלה
+
         await updateBook(book.id, {
           status: 'borrowed',
           borrowedBy: request?.requesterName,
-          borrowDate: new Date().toISOString()
+          borrowDate: new Date().toISOString(),
+          expectedReturnDate: returnDate.toISOString()
+        });
+      }
+
+      // אם דוחים - החזרת הספר לזמין
+      if (newStatus === 'rejected') {
+        await updateBook(book.id, {
+          status: 'available',
+          processingBy: null,
+          processingDate: null
         });
       }
 
@@ -386,7 +465,10 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
       setSelectedRequest(null);
       setAdminNotes('');
 
-      alert(newStatus === 'approved' ? 'הבקשה אושרה והספר הועבר למצב מושאל' : 'הבקשה נדחתה');
+      const statusMessage = newStatus === 'approved' ? 'הבקשה אושרה והספר הועבר למצב מושאל' :
+        newStatus === 'rejected' ? 'הבקשה נדחתה והספר חזר למצב זמין' :
+          'הבקשה עודכנה';
+      alert(statusMessage);
 
     } catch (error) {
       console.error('שגיאה בעדכון בקשה:', error);
@@ -395,7 +477,6 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
       setSubmitting(false);
     }
   };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -819,13 +900,17 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
         // הוספת ספר חדש
         const newBook = await addBook(bookData);
         setBooks(prev => [...prev, newBook]);
+        console.log('ספר חדש נוסף בהצלחה:', newBook.title);
       }
+      // סגירה אוטומטית של החלונית אחרי שמירה מוצלחת
       setShowBookEditor(false);
       setEditingBook(null);
-      console.log('ספר נשמר בהצלחה');
+
+      const action = editingBook ? 'עודכן' : 'נוסף';
+      alert(`הספר "${bookData.title}" ${action} בהצלחה!`);
     } catch (error) {
-      console.error('שגיאה בשמירת ספר:', error);
       alert('שגיאה בשמירת הספר: ' + error.message);
+      throw error; // מעביר את השגיאה הלאה לטיפול ב-BookEditor
     }
   };
 
@@ -858,24 +943,35 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
     }
   };
 
-  // עדכון סטטוס בקשה מהקטלוג
+
   const handleUpdateRequestStatus = async (requestId, newStatus, bookId) => {
     try {
+      console.log('מעדכן בקשה בקטלוג:', requestId, newStatus, bookId);
+
       await updateLoanRequestStatus(requestId, newStatus, '');
 
-      // עדכון סטטוס הספר אם מאשרים
+      // עדכון סטטוס הספר אם מאושר
       if (newStatus === 'approved' && bookId) {
         const request = loanRequests.find(r => r.id === requestId);
+        const returnDate = new Date();
+        returnDate.setDate(returnDate.getDate() + 14);
+
         await updateBook(bookId, {
           status: 'borrowed',
           borrowedBy: request?.requesterName,
-          borrowDate: new Date().toISOString()
+          borrowDate: new Date().toISOString(),
+          expectedReturnDate: returnDate.toISOString()
         });
 
-        // עדכון רשימת הספרים
+        // עדכון רשימת הספרים ב-state המקומי
         setBooks(prev => prev.map(book =>
           book.id === bookId
-            ? { ...book, status: 'borrowed', borrowedBy: request?.requesterName }
+            ? {
+              ...book,
+              status: 'borrowed',
+              borrowedBy: request?.requesterName,
+              borrowDate: new Date().toISOString()
+            }
             : book
         ));
       }
@@ -883,12 +979,13 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
       // רענון הבקשות
       await loadLoanRequests();
 
+      console.log('עדכון בקשה הושלם בהצלחה');
+
     } catch (error) {
       console.error('שגיאה בעדכון בקשה:', error);
       alert('שגיאה בעדכון הבקשה: ' + error.message);
     }
   };
-
   return (
     <div className="space-y-6">
       {/* כותרת וכפתורים */}
@@ -1474,6 +1571,7 @@ export default function LibrarySystem() {
   const [newEvent, setNewEvent] = useState({ title: "", description: "", time: "" });
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState("calendar");
+  const [borrowedBooksCount, setBorrowedBooksCount] = useState(0);
 
   const grid = useMemo(() => monthMatrix(cursor), [cursor]);
 
@@ -1724,6 +1822,7 @@ export default function LibrarySystem() {
           </div>
 
           <div className="flex items-center gap-3">
+
             {/* תפריט ניווט */}
             <div className="flex gap-2">
               <button
@@ -1748,6 +1847,32 @@ export default function LibrarySystem() {
                 קטלוג ספרים
               </button>
 
+              {user.role !== 'admin' && (
+                <button
+                  onClick={() => setCurrentView('borrowed')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'borrowed'
+                    ? 'bg-emerald-700 text-white'
+                    : 'border border-stone-300 hover:bg-stone-100'
+                    }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  הספרים שלי
+                </button>
+              )}
+
+              {user.role === 'admin' && (
+                <button
+                  onClick={() => setCurrentView('returns')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'returns'
+                    ? 'bg-emerald-700 text-white'
+                    : 'border border-stone-300 hover:bg-stone-100'
+                    }`}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  בקשות החזרה
+                </button>
+              )}
+
               {user.role === 'admin' && (
                 <button
                   onClick={() => setCurrentView('admin')}
@@ -1760,8 +1885,8 @@ export default function LibrarySystem() {
                   ניהול
                 </button>
               )}
-            </div>
 
+            </div>
             <input
               placeholder="חיפוש בקטלוג..."
               className="hidden md:block w-60 rounded-2xl border border-stone-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600"
@@ -1775,6 +1900,8 @@ export default function LibrarySystem() {
               )}
             </div>
 
+            <NotificationCenter user={user} /> {/* ← השורה החדשה */}
+
             <button
               onClick={() => setUser(null)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-stone-300 hover:bg-stone-100 text-sm"
@@ -1785,6 +1912,8 @@ export default function LibrarySystem() {
           </div>
         </div>
       </header>
+
+     // בתוך הקומפוננט App.jsx, החלף את החלק של main עם הקוד הבא:
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         {/* תצוגת לוח שנה */}
@@ -1798,7 +1927,7 @@ export default function LibrarySystem() {
                 </h2>
                 <p className="text-stone-700 mb-4">
                   {user.role === 'admin'
-                    ? 'כאן תוכל לנהל אוספים, אירועים ולוח השנה היהודי. יש לך גישה מלאה לכללל הפונקציות.'
+                    ? 'כאן תוכל לנהל אוספים, אירועים ולוח השנה היהודי. יש לך גישה מלאה לכלל הפונקציות.'
                     : 'כאן תוכל לראות את לוח השנה היהודי עם חגים, אירועים ותאריכים עבריים.'
                   }
                 </p>
@@ -1864,8 +1993,8 @@ export default function LibrarySystem() {
                       const isToday = toISODateKey(date) === toISODateKey(today);
                       const isSelected = toISODateKey(date) === toISODateKey(selected);
                       const key = toISODateKey(date);
-                      const dayGreg = fmtGregShort.format(date); // מספר לועזי
-                      const dayHebrewLetter = getHebrewDayLetter(date); // אות עברית
+                      const dayGreg = fmtGregShort.format(date);
+                      const dayHebrewLetter = getHebrewDayLetter(date);
                       const dayEvents = eventsByKey.get(key) || [];
                       const holidays = holidaysByKey.get(key) || [];
                       const shabbatTimes = getShabbatTimes(date);
@@ -2076,7 +2205,22 @@ export default function LibrarySystem() {
           />
         )}
 
-        {/* תצוגת פנל אדמין */}
+        {/* תצוגת הספרים שלי - רק למשתמשים רגילים */}
+        {currentView === 'borrowed' && user.role !== 'admin' && (
+          <BorrowedBooks
+            user={user}
+            onBookReturned={(bookId) => {
+              console.log('ספר הוחזר:', bookId);
+            }}
+          />
+        )}
+
+        {/* תצוגת בקשות החזרה - רק למנהלים */}
+        {currentView === 'returns' && user.role === 'admin' && (
+          <ReturnRequestsManagement currentUser={user} />
+        )}
+
+        {/* תצוגת פנל אדמין - רק למנהלים */}
         {currentView === 'admin' && user.role === 'admin' && (
           <AdminPanel
             events={events}
@@ -2085,8 +2229,12 @@ export default function LibrarySystem() {
             currentUser={user}
           />
         )}
-      </main>
 
+        {/* תצוגת ניהול בקשות הלואה - למנהלים */}
+        {currentView === 'loan-requests' && user.role === 'admin' && (
+          <LoanRequestsManagement currentUser={user} />
+        )}
+      </main>
       {/* פנל הוספת אירוע - רק למנהלים */}
       {panelOpen && user.role === 'admin' && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/30 p-4" aria-modal="true" role="dialog">
