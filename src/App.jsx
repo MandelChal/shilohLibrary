@@ -457,7 +457,7 @@ const BookDetail = ({ book, favorites, toggleFavorite, onClose, user, onEditBook
         });
       }
 
-      // קריאה לפונקציה של הקומפוננט האב לעדכון
+
       if (onUpdateRequestStatus) {
         await onUpdateRequestStatus(requestId, newStatus, book.id);
       }
@@ -1152,7 +1152,7 @@ const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
   );
 };
 
-// החלף את הקומפוננט BookCard הקיים שלך עם זה:
+
 const BookCard = ({ book, favorites, toggleFavorite, setSelectedBook, user, onEditBook, onDeleteBook, categories, pendingRequests = [], onUpdateRequestStatus }) => {
   const hasRequests = pendingRequests.length > 0;
 
@@ -1645,6 +1645,7 @@ export default function LibrarySystem() {
   }, [cursor]);
 
   // מעקב אחר שינויים ב-Firebase בזמן אמת
+  // מעקב אחר שינויים ב-Firebase בזמן אמת
   useEffect(() => {
     if (!isFirebaseEnabled || !db) {
       console.log('רץ במצב מקומי - Firebase לא מוגדר');
@@ -1666,22 +1667,34 @@ export default function LibrarySystem() {
       console.log('קטגוריות עודכנו מ-Firebase:', categoriesData.length);
     });
 
-    const unsubscribeAnnouncements = subscribeToCollection('announcements', (announcementsData) => {
-      setAnnouncements(announcementsData);
-      console.log('הודעות עודכנו מ-Firebase:', announcementsData.length);
-    });
+    // הסר את ה-unsubscribeAnnouncements - לא צריך אותו יותר
 
     return () => {
       unsubscribeEvents();
       unsubscribeBooks();
       unsubscribeCategories();
-      unsubscribeAnnouncements();
+      // הסר את השורה: unsubscribeAnnouncements();
     };
   }, []);
 
+
   const eventsByKey = useMemo(() => {
     const map = new Map();
+
+    // בדיקה שהמשתמש קיים לפני הגישה למאפיינים שלו
+    if (!user) {
+      return map; // החזר map ריק אם אין משתמש מחובר
+    }
+
     for (const ev of events) {
+      // סינון ארועים לפי הרשאות משתמש
+      if (ev.isPersonal) {
+        // ארוע אישי - הצג רק למשתמש שיצר אותו או למנהלים
+        if (user.role !== 'admin' && ev.userId !== (user.id || user.username)) {
+          continue; // דלג על ארועים אישיים של משתמשים אחרים
+        }
+      }
+
       let jsDate;
       if (ev.date?.toDate) {
         jsDate = ev.date.toDate(); // Firebase Timestamp
@@ -1693,9 +1706,7 @@ export default function LibrarySystem() {
       map.get(key).push(ev);
     }
     return map;
-  }, [events]);
-
-  // מיפוי חגים יהודיים לפי תאריך
+  }, [events, user]); // וודא שגם user נמצא ב-dependencies
   const holidaysByKey = useMemo(() => {
     const map = new Map();
     for (const holiday of monthlyHolidays) {
@@ -1740,7 +1751,10 @@ export default function LibrarySystem() {
         time: newEvent.time.trim(),
         date: selected.toISOString(),
         createdAt: new Date().toISOString(),
-        createdBy: user.name
+        createdBy: user.name,
+        userId: user.id || user.username,
+        isPersonal: true,
+        eventType: 'book_borrow'
       };
 
       const savedEvent = await addEvent(eventData);
@@ -1780,11 +1794,15 @@ export default function LibrarySystem() {
 
   const handleDeleteAnnouncement = async (announcementId) => {
     try {
-      await deleteAnnouncement(announcementId);
-      console.log('הודעה נמחקה:', announcementId);
+      setAnnouncements(prev => {
+        const filtered = prev.filter(announcement => announcement.id !== announcementId);
+        console.log(`עדכון state: נותרו ${filtered.length} הודעות מתוך ${prev.length}`);
+        return filtered;
+      });
+
+      console.log('state של הודעות עודכן, הודעה נמחקה:', announcementId);
     } catch (error) {
-      console.error('שגיאה במחיקת הודעה:', error);
-      alert('שגיאה במחיקת ההודעה: ' + error.message);
+      console.error('שגיאה בעדכון state של הודעות:', error);
     }
   };
 
@@ -1912,8 +1930,6 @@ export default function LibrarySystem() {
           </div>
         </div>
       </header>
-
-     // בתוך הקומפוננט App.jsx, החלף את החלק של main עם הקוד הבא:
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         {/* תצוגת לוח שנה */}
@@ -2054,12 +2070,26 @@ export default function LibrarySystem() {
 
                           {/* אירועים רגילים */}
                           <div className="space-y-0.5">
-                            {dayEvents.slice(0, holidays.length > 0 ? 1 : 2).map((ev) => (
-                              <div key={ev.id} className="truncate rounded-md px-1.5 py-0.5 text-[9px] bg-emerald-100 border border-emerald-200 text-emerald-800">
-                                {ev.time ? `${ev.time} ` : ""}
-                                {ev.title}
-                              </div>
-                            ))}
+                            {dayEvents.slice(0, holidays.length > 0 ? 1 : 2).map((ev) => {
+                              // בחירת צבע לפי סוג האירוע
+                              let eventColor = 'bg-emerald-100 border-emerald-200 text-emerald-800';
+
+                              if (ev.eventType === 'book_borrow' || ev.type === 'book_return') {
+                                eventColor = 'bg-cyan-100 border-cyan-200 text-cyan-800'; // צבע תכלת לאירועי ספרים
+                              } else if (ev.color === 'cyan') {
+                                eventColor = 'bg-cyan-100 border-cyan-200 text-cyan-800';
+                              }
+
+                              return (
+                                <div
+                                  key={ev.id}
+                                  className={`truncate rounded-md px-1.5 py-0.5 text-[9px] border ${eventColor}`}
+                                >
+                                  {ev.time ? `${ev.time} ` : ""}
+                                  {ev.title}
+                                </div>
+                              );
+                            })}
                             {dayEvents.length > (holidays.length > 0 ? 1 : 2) && (
                               <div className="text-[8px] text-stone-500 text-center">
                                 +{dayEvents.length - (holidays.length > 0 ? 1 : 2)} נוספים

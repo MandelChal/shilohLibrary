@@ -468,20 +468,24 @@ export const addAnnouncement = async (announcementData) => {
 
 export const deleteAnnouncement = async (announcementId) => {
     if (!isFirebaseEnabled) {
-        const announcements = await getAnnouncements();
+        // במצב localStorage
+        const saved = localStorage.getItem('libraryAnnouncements');
+        const announcements = saved ? JSON.parse(saved) : [];
         const filteredAnnouncements = announcements.filter(announcement => announcement.id !== announcementId);
         localStorage.setItem('libraryAnnouncements', JSON.stringify(filteredAnnouncements));
+        console.log('הודעה נמחקה מ-localStorage:', announcementId);
         return;
     }
 
     try {
+        // מחיקה מ-Firebase
         await deleteDoc(doc(db, 'announcements', announcementId));
+        console.log('הודעה נמחקה מ-Firebase:', announcementId);
     } catch (error) {
-        console.error('שגיאה במחיקת הודעה:', error);
-        throw error;
+        console.error('שגיאה במחיקת הודעה מ-Firebase:', error);
+        throw new Error(`שגיאה במחיקת הודעה: ${error.message}`);
     }
 };
-
 // ------------------------------------------------------
 // 📋 בקשות השאלה (Loan Requests)
 // ------------------------------------------------------
@@ -741,7 +745,6 @@ export const notifyAdminReturnRequest = async (returnData) => {
         console.error('שגיאה בשליחת הודעה למנהלים:', error);
     }
 };
-// עדכון הפונקציה sendLoanRequestNotification לתמיכה בהחזרה
 export const sendLoanRequestNotification = async (userId, requestData, newStatus, adminNotes = '', returnDate = null) => {
     let title, message, type;
 
@@ -770,28 +773,51 @@ export const sendLoanRequestNotification = async (userId, requestData, newStatus
 ${adminNotes ? `הערת הספרן: ${adminNotes}` : 'בהצלחה בלימודים!'}`;
             type = 'success';
 
-            // הוספת אירוע החזרה ללוח השנה
+            // הוספת אירוע השאלה ללוח השנה - רק למשתמש המבקש
             try {
+                const loanEventDate = new Date();
+
+                const loanEventData = {
+                    title: `השאלת ספר: ${requestData.bookTitle}`,
+                    description: `ספר מושאל מספריית שילה\nתאריך החזרה: ${getReturnDate()}\nמיקום: ${getBookLocation()}`,
+                    date: loanEventDate.toISOString(),
+                    time: '09:00',
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'מערכת הודעות',
+                    type: 'book_loan',
+                    eventType: 'book_borrow',
+                    bookId: requestData.bookId,
+                    userId: userId, // רק למשתמש המבקש
+                    loanRequestId: requestData.id,
+                    isPersonal: true // ארוע אישי
+                };
+
+                await addEvent(loanEventData);
+                console.log('אירוע השאלת ספר נוסף ללוח השנה של המשתמש');
+
+                // הוספת אירוע החזרה ללוח השנה - רק למשתמש המבקש
                 const returnEventDate = new Date();
                 returnEventDate.setDate(returnEventDate.getDate() + 14);
 
-                const eventData = {
+                const returnEventData = {
                     title: `החזרת ספר: ${requestData.bookTitle}`,
-                    description: `מועד החזרה של הספר "${requestData.bookTitle}" לספרייית שילה`,
+                    description: `מועד החזרה של הספר "${requestData.bookTitle}" לספרייה`,
                     date: returnEventDate.toISOString(),
                     time: '18:00',
                     createdAt: new Date().toISOString(),
                     createdBy: 'מערכת הודעות',
                     type: 'book_return',
+                    eventType: 'book_return',
                     bookId: requestData.bookId,
-                    userId: userId,
-                    loanRequestId: requestData.id
+                    userId: userId, // רק למשתמש המבקש
+                    loanRequestId: requestData.id,
+                    isPersonal: true // ארוע אישי
                 };
 
-                await addEvent(eventData);
-                console.log('אירוע החזרת ספר נוסף ללוח השנה');
+                await addEvent(returnEventData);
+                console.log('אירוע החזרת ספר נוסף ללוח השנה של המשתמש');
             } catch (error) {
-                console.error('שגיאה בהוספת אירוע ללוח שנה:', error);
+                console.error('שגיאה בהוספת אירועים ללוח שנה:', error);
             }
             break;
 
@@ -799,7 +825,7 @@ ${adminNotes ? `הערת הספרן: ${adminNotes}` : 'בהצלחה בלימוד
             title = `${requestData.requesterName}, בקשת ההשאלה נדחתה`;
             message = `הבקשה לספר "${requestData.bookTitle}" נדחתה.
 
-${adminNotes ? `סיבת הדחיה: ${adminNotes}` : 'יייתכן שהספר כבר מושאל או בתחזוקה.'}
+${adminNotes ? `סיבת הדחיה: ${adminNotes}` : 'ייתכן שהספר כבר מושאל או בתחזוקה.'}
 
 ניתן לפנות לספרן לקבלת מידע נוסף או לבקש ספר חלופי.`;
             type = 'error';
@@ -807,11 +833,28 @@ ${adminNotes ? `סיבת הדחיה: ${adminNotes}` : 'יייתכן שהספר �
 
         case 'returned':
             title = `${requestData.requesterName}, הספר הוחזר בהצלחה`;
-            message = `הספר "${requestData.bookTitle}" הוחזר בהצלחה לספרייית שילה.
+            message = `הספר "${requestData.bookTitle}" הוחזר בהצלחה לספרייה.
 
 תודה שהשתמשת בשירותי הספרייה!
 ${adminNotes ? `הערת הספרן: ${adminNotes}` : ''}`;
             type = 'success';
+
+            // מחיקת אירועי השאלה והחזרה מהלוח שנה של המשתמש
+            try {
+                const events = await getEvents();
+                const userBookEvents = events.filter(event =>
+                    event.userId === userId &&
+                    event.bookId === requestData.bookId &&
+                    (event.type === 'book_loan' || event.type === 'book_return')
+                );
+
+                for (const event of userBookEvents) {
+                    await deleteEvent(event.id);
+                }
+                console.log('אירועי השאלה והחזרה נמחקו מלוח השנה של המשתמש');
+            } catch (error) {
+                console.error('שגיאה במחיקת אירועים:', error);
+            }
             break;
 
         case 'pending_return':
@@ -849,8 +892,30 @@ ${adminNotes ? `הערת הספרן: ${adminNotes}` : ''}`;
     }
 };
 
-// 📄 dbHelpers.js
+export const createAdminLoanEvent = async (requestData, adminUser) => {
+    try {
+        const eventData = {
+            title: `השאלה: ${requestData.bookTitle}`,
+            description: `ספר הושאל ל${requestData.requesterName}\nטלפון: ${requestData.contactPhone}`,
+            date: new Date().toISOString(),
+            time: '09:00',
+            createdAt: new Date().toISOString(),
+            createdBy: 'מערכת ניהול',
+            type: 'admin_loan_tracking',
+            eventType: 'admin_book_tracking',
+            bookId: requestData.bookId,
+            userId: adminUser.id,
+            loanRequestId: requestData.id,
+            isPersonal: false, // אירוע מערכת - יוצג לכל המנהלים
+            requesterName: requestData.requesterName
+        };
 
+        await addEvent(eventData);
+        console.log('אירוע מעקב השאלה נוצר עבור מנהלים');
+    } catch (error) {
+        console.error('שגיאה ביצירת אירוע מעקב השאלה:', error);
+    }
+};
 export const getUserBorrowedBooks = async (userId) => {
     if (!isFirebaseEnabled) {
         const saved = localStorage.getItem('libraryLoanRequests');

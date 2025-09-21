@@ -27,13 +27,15 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
         regularUsers: 0
     });
     const [loading, setLoading] = useState(true);
-
+    const [localAnnouncements, setLocalAnnouncements] = useState([]);
     // טעינת סטטיסטיקות מ-Firebase
     useEffect(() => {
         loadStats();
     }, []);
 
-    // הסר את הקוד השגוי שהיה כאן (שורות 45-52 במקור)
+    useEffect(() => {
+        setLocalAnnouncements(announcements || []);
+    }, [announcements]);
 
     // מעקב אחר שינויים בזמן אמת
     useEffect(() => {
