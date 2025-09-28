@@ -64,7 +64,7 @@ export default function NotificationCenter({ user }) {
             // עדכון state מקומי
             setNotifications(prev =>
                 prev.map(notif =>
-                    notif.id === notificationId ? { ...notif, isRead: true } : notif
+                    notif.id === notificationId ? { ...notif, read: true } : notif
                 )
             );
             setUnreadCount(prev => Math.max(0, prev - 1));
@@ -86,7 +86,7 @@ export default function NotificationCenter({ user }) {
                 const newNotifs = prev.filter(notif => notif.id !== notificationId);
 
                 // עדכון מונה הלא נקראות רק אם ההודעה שנמחקה לא נקראה
-                if (notifToDelete && !notifToDelete.isRead) {
+                if (notifToDelete && !notifToDelete.read) {
                     setUnreadCount(prev => Math.max(0, prev - 1));
                 }
 
@@ -103,14 +103,14 @@ export default function NotificationCenter({ user }) {
     const handleMarkAllAsRead = useCallback(async () => {
         try {
             // סימון כל ההודעות הלא נקראות
-            const unreadNotifications = notifications.filter(n => !n.isRead);
+            const unreadNotifications = notifications.filter(n => !n.read);
 
             for (const notification of unreadNotifications) {
                 await markNotificationAsRead(notification.id);
             }
 
             // עדכון state מקומי
-            setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
+            setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
             setUnreadCount(0);
 
             console.log('כל ההודעות סומנו כנקראו');
@@ -154,7 +154,7 @@ export default function NotificationCenter({ user }) {
 
     const openNotificationDetail = (notification) => {
         setSelectedNotification(notification);
-        if (!notification.isRead) {
+        if (!notification.read) {
             handleMarkAsRead(notification.id);
         }
     };
@@ -222,7 +222,7 @@ export default function NotificationCenter({ user }) {
                             notifications.map(notification => (
                                 <div
                                     key={notification.id}
-                                    className={`p-4 border-b border-gray-100 transition-all hover:bg-gray-50 cursor-pointer ${!notification.isRead ? 'bg-blue-50 border-r-4 border-blue-400' : ''
+                                    className={`p-4 border-b border-gray-100 transition-all hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50 border-r-4 border-blue-400' : ''
                                         }`}
                                     onClick={() => openNotificationDetail(notification)}
                                 >
@@ -233,7 +233,7 @@ export default function NotificationCenter({ user }) {
                                                 <div className="font-medium text-gray-800 truncate">
                                                     {notification.title}
                                                 </div>
-                                                {!notification.isRead && (
+                                                {!notification.read && (
                                                     <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                                                 )}
                                             </div>
@@ -254,7 +254,7 @@ export default function NotificationCenter({ user }) {
                                         </div>
 
                                         <div className="flex flex-col gap-1 flex-shrink-0">
-                                            {!notification.isRead && (
+                                            {!notification.read && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -361,8 +361,8 @@ export default function NotificationCenter({ user }) {
                                                     <div className="flex justify-between">
                                                         <span className="font-medium">סטטוס:</span>
                                                         <span className={`px-2 py-1 rounded text-xs ${book.status === 'available' ? 'bg-green-100 text-green-700' :
-                                                                book.status === 'borrowed' ? 'bg-orange-100 text-orange-700' :
-                                                                    'bg-red-100 text-red-700'
+                                                            book.status === 'borrowed' ? 'bg-orange-100 text-orange-700' :
+                                                                'bg-red-100 text-red-700'
                                                             }`}>
                                                             {book.status === 'available' ? 'זמין' :
                                                                 book.status === 'borrowed' ? 'מושאל' : 'תחזוקה'}
@@ -393,9 +393,9 @@ export default function NotificationCenter({ user }) {
                             {selectedNotification.type && (
                                 <div className="mb-4">
                                     <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${selectedNotification.type === 'success' ? 'bg-green-100 text-green-800' :
-                                            selectedNotification.type === 'error' ? 'bg-red-100 text-red-800' :
-                                                selectedNotification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                                                    'bg-blue-100 text-blue-800'
+                                        selectedNotification.type === 'error' ? 'bg-red-100 text-red-800' :
+                                            selectedNotification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-blue-100 text-blue-800'
                                         }`}>
                                         <span>{getNotificationIcon(selectedNotification.type)}</span>
                                         {selectedNotification.type === 'success' ? 'בקשה אושרה' :
@@ -413,7 +413,7 @@ export default function NotificationCenter({ user }) {
                                 >
                                     סגור
                                 </button>
-                                {!selectedNotification.isRead && (
+                                {!selectedNotification.read && (
                                     <button
                                         onClick={() => {
                                             handleMarkAsRead(selectedNotification.id);

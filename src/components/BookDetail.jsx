@@ -6,7 +6,9 @@ import {
     addLoanRequest,
     updateBook,
     updateLoanRequestStatus,
-    notifyAdminNewRequest
+    notifyAdminNewRequest,
+    validateUserPhoneNumber,
+    addLoanRequestWithPhoneValidation
 } from '../utils/dbHelpers';
 
 const BookDetail = ({
@@ -30,6 +32,30 @@ const BookDetail = ({
     const [submitting, setSubmitting] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [adminNotes, setAdminNotes] = useState('');
+    const [phoneValidation, setPhoneValidation] = useState({ isValid: null, error: '' });
+
+    // בדיקת תקינות מספר טלפון בזמן אמת
+    const handlePhoneChange = async (phoneNumber) => {
+        setLoanData(prev => ({ ...prev, contactPhone: phoneNumber }));
+
+        if (!phoneNumber.trim()) {
+            setPhoneValidation({ isValid: null, error: '' });
+            return;
+        }
+
+        try {
+            const validation = await validateUserPhoneNumber(
+                user.id || user.username,
+                phoneNumber.trim()
+            );
+            setPhoneValidation(validation);
+        } catch (error) {
+            setPhoneValidation({
+                isValid: false,
+                error: 'שגיאה בבדיקת מספר הטלפון'
+            });
+        }
+    };
 
     const handleLoanRequest = async (e) => {
         e.preventDefault();
@@ -41,6 +67,17 @@ const BookDetail = ({
 
         setSubmitting(true);
         try {
+            // אימות מספר הטלפון לפני שליחת הבקשה
+            const phoneValidation = await validateUserPhoneNumber(
+                user.id || user.username,
+                loanData.contactPhone.trim()
+            );
+
+            if (!phoneValidation.isValid) {
+                alert(`שגיאה באימות מספר הטלפון: ${phoneValidation.error}`);
+                return;
+            }
+
             const requestData = {
                 bookId: book.id,
                 bookTitle: book.title,
@@ -48,14 +85,14 @@ const BookDetail = ({
                 bookLocation: book.location,
                 requesterId: user.id || user.username,
                 requesterName: user.name,
-                contactPhone: loanData.contactPhone.trim(),
+                contactPhone: phoneValidation.formattedNumber, // מספר מאומת ומעוצב
                 notes: loanData.notes.trim(),
                 expectedReturnDate: loanData.returnDate || null,
                 status: 'pending'
             };
 
-            // הוספת הבקשה למסד הנתונים
-            await addLoanRequest(requestData);
+            // הוספת הבקשה למסד הנתונים עם אימות טלפון
+            await addLoanRequestWithPhoneValidation(requestData);
 
             // עדכון סטטוס הספר ל"בעיבוד"
             await updateBook(book.id, {
@@ -72,13 +109,14 @@ const BookDetail = ({
 פרטי הבקשה:
 • ספר: ${book.title}
 • מבקש: ${user.name}
-• טלפון: ${loanData.contactPhone}
+• טלפון: ${phoneValidation.formattedNumber} ✅ מאומת
 
 הספר מועבר כעת לסטטוס "בעיבוד".
 הנהלת הספרייה תבדוק את הבקשה ותחזור אליך בהקדם.`);
 
             setShowLoanForm(false);
             setLoanData({ contactPhone: '', notes: '', returnDate: '' });
+            setPhoneValidation({ isValid: null, error: '' });
 
         } catch (error) {
             console.error('שגיאה בשליחת בקשת השאלה:', error);
@@ -271,15 +309,44 @@ const BookDetail = ({
                                     <label className="block text-sm font-medium text-blue-700 mb-1">
                                         מספר טלפון ליצירת קשר *
                                     </label>
-                                    <input
-                                        type="tel"
-                                        value={loanData.contactPhone}
-                                        onChange={(e) => setLoanData(prev => ({ ...prev, contactPhone: e.target.value }))}
-                                        className="w-full rounded-lg border border-blue-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="050-1234567"
-                                        required
-                                        disabled={submitting}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="tel"
+                                            value={loanData.contactPhone}
+                                            onChange={(e) => handlePhoneChange(e.target.value)}
+                                            className={`w-full rounded-lg border px-3 py-2 pr-10 focus:outline-none focus:ring-2 ${phoneValidation.isValid === true
+                                                ? 'border-green-300 focus:ring-green-500 bg-green-50'
+                                                : phoneValidation.isValid === false
+                                                    ? 'border-red-300 focus:ring-red-500 bg-red-50'
+                                                    : 'border-blue-300 focus:ring-blue-500'
+                                                }`}
+                                            placeholder="050-1234567"
+                                            required
+                                            disabled={submitting}
+                                        />
+                                        {phoneValidation.isValid === true && (
+                                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500">
+                                                ✅
+                                            </div>
+                                        )}
+                                        {phoneValidation.isValid === false && (
+                                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500">
+                                                ❌
+                                            </div>
+                                        )}
+                                    </div>
+                                    {phoneValidation.error && (
+                                        <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                                            <span>⚠️</span>
+                                            {phoneValidation.error}
+                                        </p>
+                                    )}
+                                    {phoneValidation.isValid === true && (
+                                        <p className="mt-1 text-sm text-green-600 flex items-center gap-1">
+                                            <span>✅</span>
+                                            מספר טלפון תקין ומאומת
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -312,14 +379,24 @@ const BookDetail = ({
                                 <div className="flex gap-3">
                                     <button
                                         type="submit"
-                                        disabled={submitting || !loanData.contactPhone.trim()}
-                                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={submitting || !loanData.contactPhone.trim() || phoneValidation.isValid !== true}
+                                        className={`flex-1 px-4 py-2 rounded-lg transition-all duration-200 ${phoneValidation.isValid === true
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
-                                        {submitting ? 'שולח בקשה...' : 'שלח בקשה'}
+                                        {submitting ? 'שולח בקשה...' :
+                                            phoneValidation.isValid === true ? 'שלח בקשה' :
+                                                phoneValidation.isValid === false ? 'תקן את מספר הטלפון' :
+                                                    'בדוק את מספר הטלפון'}
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setShowLoanForm(false)}
+                                        onClick={() => {
+                                            setShowLoanForm(false);
+                                            setLoanData({ contactPhone: '', notes: '', returnDate: '' });
+                                            setPhoneValidation({ isValid: null, error: '' });
+                                        }}
                                         disabled={submitting}
                                         className="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 disabled:opacity-50"
                                     >

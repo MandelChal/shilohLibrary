@@ -649,7 +649,7 @@ export const addNotification = async (notificationData) => {
             id: Date.now().toString(),
             ...notificationData,
             createdAt: new Date().toISOString(),
-            isRead: false
+            read: false  // ✅ שונה מ-isRead ל-read
         };
         notifications.unshift(newNotification);
         localStorage.setItem('libraryNotifications', JSON.stringify(notifications));
@@ -660,7 +660,7 @@ export const addNotification = async (notificationData) => {
         const docRef = await addDoc(collection(db, 'notifications'), {
             ...notificationData,
             createdAt: serverTimestamp(),
-            isRead: false
+            read: false  // ✅ שונה מ-isRead ל-read
         });
         return { id: docRef.id, ...notificationData };
     } catch (error) {
@@ -675,7 +675,7 @@ export const markNotificationAsRead = async (notificationId) => {
         const saved = localStorage.getItem('libraryNotifications');
         const notifications = saved ? JSON.parse(saved) : [];
         const updatedNotifications = notifications.map(n =>
-            n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
+            n.id === notificationId ? { ...n, read: true, readAt: new Date().toISOString() } : n  // ✅ שונה מ-isRead ל-read
         );
         localStorage.setItem('libraryNotifications', JSON.stringify(updatedNotifications));
         return;
@@ -684,7 +684,7 @@ export const markNotificationAsRead = async (notificationId) => {
     try {
         const notificationRef = doc(db, 'notifications', notificationId);
         await updateDoc(notificationRef, {
-            isRead: true,
+            read: true,  // ✅ שונה מ-isRead ל-read
             readAt: serverTimestamp()
         });
     } catch (error) {
@@ -734,7 +734,7 @@ export const notifyAdminReturnRequest = async (returnData) => {
                 bookTitle: returnData.bookTitle,
                 bookId: returnData.bookId,
                 createdAt: new Date().toISOString(),
-                isRead: false
+                read: false  // ✅ שונה מ-isRead ל-read
             };
 
             await addNotification(notificationData);
@@ -773,51 +773,11 @@ export const sendLoanRequestNotification = async (userId, requestData, newStatus
 ${adminNotes ? `הערת הספרן: ${adminNotes}` : 'בהצלחה בלימודים!'}`;
             type = 'success';
 
-            // הוספת אירוע השאלה ללוח השנה - רק למשתמש המבקש
+            // יצירת אירועי החזרה אוטומטיים
             try {
-                const loanEventDate = new Date();
-
-                const loanEventData = {
-                    title: `השאלת ספר: ${requestData.bookTitle}`,
-                    description: `ספר מושאל מספריית שילה\nתאריך החזרה: ${getReturnDate()}\nמיקום: ${getBookLocation()}`,
-                    date: loanEventDate.toISOString(),
-                    time: '09:00',
-                    createdAt: new Date().toISOString(),
-                    createdBy: 'מערכת הודעות',
-                    type: 'book_loan',
-                    eventType: 'book_borrow',
-                    bookId: requestData.bookId,
-                    userId: userId, // רק למשתמש המבקש
-                    loanRequestId: requestData.id,
-                    isPersonal: true // ארוע אישי
-                };
-
-                await addEvent(loanEventData);
-                console.log('אירוע השאלת ספר נוסף ללוח השנה של המשתמש');
-
-                // הוספת אירוע החזרה ללוח השנה - רק למשתמש המבקש
-                const returnEventDate = new Date();
-                returnEventDate.setDate(returnEventDate.getDate() + 14);
-
-                const returnEventData = {
-                    title: `החזרת ספר: ${requestData.bookTitle}`,
-                    description: `מועד החזרה של הספר "${requestData.bookTitle}" לספרייה`,
-                    date: returnEventDate.toISOString(),
-                    time: '18:00',
-                    createdAt: new Date().toISOString(),
-                    createdBy: 'מערכת הודעות',
-                    type: 'book_return',
-                    eventType: 'book_return',
-                    bookId: requestData.bookId,
-                    userId: userId, // רק למשתמש המבקש
-                    loanRequestId: requestData.id,
-                    isPersonal: true // ארוע אישי
-                };
-
-                await addEvent(returnEventData);
-                console.log('אירוע החזרת ספר נוסף ללוח השנה של המשתמש');
+                await createAutomaticReturnEvents(requestData, userId);
             } catch (error) {
-                console.error('שגיאה בהוספת אירועים ללוח שנה:', error);
+                console.error('שגיאה ביצירת אירועי החזרה אוטומטיים:', error);
             }
             break;
 
@@ -881,7 +841,7 @@ ${adminNotes ? `הערת הספרן: ${adminNotes}` : ''}`;
             bookTitle: requestData.bookTitle,
             bookId: requestData.bookId,
             createdAt: new Date().toISOString(),
-            isRead: false
+            read: false  // ✅ שונה מ-isRead ל-read
         };
 
         await addNotification(notificationData);
@@ -1020,7 +980,7 @@ ${requestData.notes ? `הערות: ${requestData.notes}` : ''}`;
                 relatedId: requestData.id,
                 relatedType: 'new_loan_request',
                 createdAt: new Date().toISOString(),
-                isRead: false
+                read: false  // ✅ שונה מ-isRead ל-read
             };
 
             await addNotification(notificationData);
@@ -1140,10 +1100,423 @@ export const initializeDefaultData = async () => {
 export const getUnreadNotificationsCount = async (userId) => {
     try {
         const notifications = await getNotifications(userId);
-        return notifications.filter(n => !n.isRead).length;
+        return notifications.filter(n => !n.read).length;  // ✅ שונה מ-isRead ל-read
     } catch (error) {
         console.error('שגיאה בספירת הודעות לא נקראות:', error);
         return 0;
+    }
+};
+
+// פונקציה חדשה למניעת הודעות כפולות
+export const addNotificationWithDuplicateCheck = async (notificationData) => {
+    try {
+        // בדיקה אם קיימת הודעה דומה
+        const existingNotifications = await getNotifications(notificationData.userId);
+        const isDuplicate = existingNotifications.some(notif =>
+            notif.title === notificationData.title &&
+            notif.message === notificationData.message &&
+            notif.relatedType === notificationData.relatedType &&
+            notif.relatedId === notificationData.relatedId &&
+            // בדיקה שההודעה נוצרה ב-24 השעות האחרונות
+            new Date() - new Date(notif.createdAt) < 24 * 60 * 60 * 1000
+        );
+
+        if (isDuplicate) {
+            console.log('הודעה דומה כבר קיימת, לא נוצרת הודעה חדשה');
+            return null;
+        }
+
+        return await addNotification(notificationData);
+    } catch (error) {
+        console.error('שגיאה בבדיקת הודעות כפולות:', error);
+        // אם יש שגיאה, נוסיף את ההודעה בכל מקרה
+        return await addNotification(notificationData);
+    }
+};
+
+// ------------------------------------------------------
+// 📅 פונקציות אירועי החזרת ספרים
+// ------------------------------------------------------
+
+// יצירת אירוע החזרת ספר למשתמש
+export const createReturnEvent = async (userId, bookData, returnDate) => {
+    try {
+        const eventData = {
+            title: `החזרת ספר: ${bookData.title}`,
+            description: `מועד החזרה של הספר "${bookData.title}" לספרייה\nמחבר: ${bookData.author}\nמיקום: ${bookData.location?.color || ''} ${bookData.location?.letter || ''}${bookData.location?.number || ''}`,
+            date: returnDate.toISOString(),
+            time: '18:00',
+            createdBy: 'מערכת אוטומטית',
+            bookId: bookData.id,
+            bookTitle: bookData.title,
+            userId: userId,
+            bookOwnerId: userId,
+            isPersonal: true, // אירוע אישי - רק למשתמש
+            returnDate: returnDate.toISOString()
+        };
+
+        const event = await createEventWithType(eventData, 'book_return');
+        console.log(`אירוע החזרת ספר נוצר עבור משתמש ${userId}: ${bookData.title}`);
+        return event;
+    } catch (error) {
+        console.error('שגיאה ביצירת אירוע החזרת ספר:', error);
+        throw error;
+    }
+};
+
+// יצירת אירוע החזרת ספר למנהל (מעקב)
+export const createAdminReturnEvent = async (adminUserId, bookData, borrowerName, returnDate) => {
+    try {
+        const eventData = {
+            title: `החזרה מתוכננת: ${bookData.title}`,
+            description: `ספר "${bookData.title}" אמור להיות מוחזר על ידי ${borrowerName}\nתאריך החזרה: ${returnDate.toLocaleDateString('he-IL')}\nמחבר: ${bookData.author}`,
+            date: returnDate.toISOString(),
+            time: '18:00',
+            createdBy: 'מערכת אוטומטית',
+            bookId: bookData.id,
+            bookTitle: bookData.title,
+            userId: adminUserId,
+            borrowerName: borrowerName,
+            isPersonal: false, // אירוע מערכת - יוצג לכל המנהלים
+            returnDate: returnDate.toISOString()
+        };
+
+        const event = await createEventWithType(eventData, 'admin_event');
+        console.log(`אירוע מעקב החזרה נוצר עבור מנהל ${adminUserId}: ${bookData.title}`);
+        return event;
+    } catch (error) {
+        console.error('שגיאה ביצירת אירוע מעקב החזרה:', error);
+        throw error;
+    }
+};
+
+// בדיקת ספרים שפג תוקפם
+export const checkOverdueBooks = async () => {
+    try {
+        const today = new Date();
+        const loanRequests = await getLoanRequests();
+        const overdueBooks = [];
+
+        // מציאת ספרים שפג תוקפם
+        for (const request of loanRequests) {
+            if (request.status === 'approved' && request.expectedReturnDate) {
+                const returnDate = new Date(request.expectedReturnDate);
+                if (returnDate < today) {
+                    overdueBooks.push({
+                        ...request,
+                        daysOverdue: Math.ceil((today - returnDate) / (1000 * 60 * 60 * 24))
+                    });
+                }
+            }
+        }
+
+        if (overdueBooks.length > 0) {
+            // שליחת התראה למנהלים על ספרים שפג תוקפם
+            await notifyAdminsAboutOverdueBooks(overdueBooks);
+        }
+
+        return overdueBooks;
+    } catch (error) {
+        console.error('שגיאה בבדיקת ספרים שפג תוקפם:', error);
+        return [];
+    }
+};
+
+// התראה למנהלים על ספרים שפג תוקפם
+export const notifyAdminsAboutOverdueBooks = async (overdueBooks) => {
+    try {
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        for (const admin of admins) {
+            const overdueCount = overdueBooks.length;
+            const message = `יש ${overdueCount} ספרים שפג תוקפם:
+
+${overdueBooks.map(book =>
+                `• "${book.bookTitle}" - ${book.requesterName} (${book.daysOverdue} ימים)`
+            ).join('\n')}
+
+יש ליצור קשר עם המשאילים להחזרת הספרים.`;
+
+            const notificationData = {
+                userId: admin.id,
+                title: `התראה: ${overdueCount} ספרים שפג תוקפם`,
+                message,
+                type: 'warning',
+                relatedType: 'overdue_books',
+                createdAt: new Date().toISOString(),
+                read: false
+            };
+
+            await addNotificationWithDuplicateCheck(notificationData);
+        }
+
+        console.log(`התראה על ${overdueBooks.length} ספרים שפג תוקפם נשלחה ל-${admins.length} מנהלים`);
+    } catch (error) {
+        console.error('שגיאה בשליחת התראה על ספרים שפג תוקפם:', error);
+    }
+};
+
+// פונקציה מעודכנת ליצירת אירועי החזרה אוטומטיים
+export const createAutomaticReturnEvents = async (requestData, userId) => {
+    try {
+        // יצירת אירוע החזרה למשתמש
+        const returnDate = requestData.expectedReturnDate
+            ? new Date(requestData.expectedReturnDate)
+            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 ימים מהתאריך הנוכחי
+
+        const bookData = {
+            id: requestData.bookId,
+            title: requestData.bookTitle,
+            author: requestData.bookAuthor,
+            location: requestData.bookLocation
+        };
+
+        // יצירת אירוע למשתמש
+        await createReturnEvent(userId, bookData, returnDate);
+
+        // יצירת אירוע מעקב למנהלים
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        for (const admin of admins) {
+            await createAdminReturnEvent(admin.id, bookData, requestData.requesterName, returnDate);
+        }
+
+        console.log(`אירועי החזרה אוטומטיים נוצרו עבור ספר: ${requestData.bookTitle}`);
+    } catch (error) {
+        console.error('שגיאה ביצירת אירועי החזרה אוטומטיים:', error);
+    }
+};
+
+// ------------------------------------------------------
+// 📱 מערכת אימות מספרי טלפון
+// ------------------------------------------------------
+
+// פונקציה לאימות פורמט מספר טלפון ישראלי
+export const validatePhoneNumber = (phoneNumber) => {
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+        return {
+            isValid: false,
+            error: 'מספר טלפון לא תקין'
+        };
+    }
+
+    // ניקוי המספר מכל התווים שאינם ספרות
+    const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
+
+    // בדיקת אורך המספר
+    if (cleanNumber.length < 9 || cleanNumber.length > 10) {
+        return {
+            isValid: false,
+            error: 'מספר טלפון חייב להכיל 9-10 ספרות'
+        };
+    }
+
+    // בדיקת פורמט ישראלי
+    const israeliPhonePattern = /^(0[2-9]|5[0-9])[0-9]{7,8}$/;
+    if (!israeliPhonePattern.test(cleanNumber)) {
+        return {
+            isValid: false,
+            error: 'מספר טלפון לא תואם לפורמט ישראלי'
+        };
+    }
+
+    return {
+        isValid: true,
+        cleanNumber: cleanNumber,
+        formattedNumber: formatPhoneNumber(cleanNumber)
+    };
+};
+
+// פונקציה לעיצוב מספר טלפון
+export const formatPhoneNumber = (phoneNumber) => {
+    const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
+
+    if (cleanNumber.length === 9) {
+        return `${cleanNumber.slice(0, 3)}-${cleanNumber.slice(3, 6)}-${cleanNumber.slice(6)}`;
+    } else if (cleanNumber.length === 10) {
+        return `${cleanNumber.slice(0, 3)}-${cleanNumber.slice(3, 6)}-${cleanNumber.slice(6)}`;
+    }
+
+    return phoneNumber;
+};
+
+// פונקציה לבדיקה שמספר הטלפון שייך למשתמש המבקש
+export const validateUserPhoneNumber = async (userId, providedPhone) => {
+    try {
+        // קבלת נתוני המשתמש
+        const users = await getUsers();
+        const user = users.find(u => u.id === userId || u.username === userId);
+
+        if (!user) {
+            return {
+                isValid: false,
+                error: 'משתמש לא נמצא'
+            };
+        }
+
+        // אימות פורמט המספר
+        const phoneValidation = validatePhoneNumber(providedPhone);
+        if (!phoneValidation.isValid) {
+            return phoneValidation;
+        }
+
+        // בדיקה שהמספר תואם למשתמש
+        const userPhone = user.phone ? user.phone.replace(/[^\d]/g, '') : '';
+        const providedPhoneClean = phoneValidation.cleanNumber;
+
+        if (userPhone && userPhone !== providedPhoneClean) {
+            return {
+                isValid: false,
+                error: 'מספר הטלפון לא תואם למשתמש המחובר'
+            };
+        }
+
+        return {
+            isValid: true,
+            user: user,
+            formattedNumber: phoneValidation.formattedNumber
+        };
+
+    } catch (error) {
+        console.error('שגיאה בבדיקת מספר טלפון:', error);
+        return {
+            isValid: false,
+            error: 'שגיאה בבדיקת מספר הטלפון'
+        };
+    }
+};
+
+// פונקציה מעודכנת להוספת בקשת השאלה עם אימות טלפון
+export const addLoanRequestWithPhoneValidation = async (requestData) => {
+    try {
+        // אימות מספר הטלפון
+        const phoneValidation = await validateUserPhoneNumber(
+            requestData.requesterId,
+            requestData.contactPhone
+        );
+
+        if (!phoneValidation.isValid) {
+            throw new Error(phoneValidation.error);
+        }
+
+        // הוספת הבקשה עם מספר הטלפון המאומת
+        const validatedRequestData = {
+            ...requestData,
+            contactPhone: phoneValidation.formattedNumber,
+            phoneValidated: true,
+            validatedAt: new Date().toISOString()
+        };
+
+        return await addLoanRequest(validatedRequestData);
+
+    } catch (error) {
+        console.error('שגיאה באימות מספר טלפון:', error);
+        throw error;
+    }
+};
+
+// ------------------------------------------------------
+// 🎨 מערכת סוגי אירועים עם קידוד צבעים
+// ------------------------------------------------------
+
+// הגדרת סוגי אירועים וצבעיהם
+export const EVENT_TYPES = {
+    ADMIN_EVENT: {
+        type: 'admin_event',
+        name: 'אירוע מנהל',
+        color: 'bg-blue-100 border-blue-200 text-blue-800',
+        icon: '👑',
+        visibility: 'all' // נראה לכל המשתמשים
+    },
+    BOOK_RETURN: {
+        type: 'book_return',
+        name: 'החזרת ספר',
+        color: 'bg-orange-100 border-orange-200 text-orange-800',
+        icon: '📚',
+        visibility: 'owner_and_admin' // נראה לבעל הספר + מנהל
+    },
+    PERSONAL: {
+        type: 'personal',
+        name: 'אירוע אישי',
+        color: 'bg-green-100 border-green-200 text-green-800',
+        icon: '👤',
+        visibility: 'creator_and_admin' // נראה ליוצר + מנהל
+    }
+};
+
+// פונקציה לקבלת צבע אירוע לפי סוג
+export const getEventColor = (eventType) => {
+    const eventTypeConfig = Object.values(EVENT_TYPES).find(
+        config => config.type === eventType
+    );
+    return eventTypeConfig ? eventTypeConfig.color : 'bg-gray-100 border-gray-200 text-gray-800';
+};
+
+// פונקציה לקבלת אייקון אירוע לפי סוג
+export const getEventIcon = (eventType) => {
+    const eventTypeConfig = Object.values(EVENT_TYPES).find(
+        config => config.type === eventType
+    );
+    return eventTypeConfig ? eventTypeConfig.icon : '📅';
+};
+
+// פונקציה לבדיקת נראות אירוע למשתמש
+export const isEventVisibleToUser = (event, userId, userRole) => {
+    const eventTypeConfig = Object.values(EVENT_TYPES).find(
+        config => config.type === event.type
+    );
+
+    if (!eventTypeConfig) {
+        return false; // סוג אירוע לא מוכר
+    }
+
+    switch (eventTypeConfig.visibility) {
+        case 'all':
+            return true; // נראה לכל המשתמשים
+
+        case 'owner_and_admin':
+            // נראה לבעל הספר + מנהל
+            return userRole === 'admin' ||
+                event.userId === userId ||
+                event.bookOwnerId === userId;
+
+        case 'creator_and_admin':
+            // נראה ליוצר + מנהל
+            return userRole === 'admin' ||
+                event.createdBy === userId ||
+                event.userId === userId;
+
+        default:
+            return false;
+    }
+};
+
+// פונקציה לסינון אירועים לפי נראות למשתמש
+export const filterEventsByVisibility = (events, userId, userRole) => {
+    return events.filter(event => isEventVisibleToUser(event, userId, userRole));
+};
+
+// פונקציה מעודכנת ליצירת אירוע עם סוג ונראות
+export const createEventWithType = async (eventData, eventType = 'personal') => {
+    try {
+        const eventTypeConfig = EVENT_TYPES[eventType.toUpperCase()] || EVENT_TYPES.PERSONAL;
+
+        const enhancedEventData = {
+            ...eventData,
+            type: eventTypeConfig.type,
+            eventType: eventTypeConfig.type,
+            color: eventTypeConfig.color,
+            icon: eventTypeConfig.icon,
+            visibility: eventTypeConfig.visibility,
+            createdAt: new Date().toISOString()
+        };
+
+        return await addEvent(enhancedEventData);
+    } catch (error) {
+        console.error('שגיאה ביצירת אירוע עם סוג:', error);
+        throw error;
     }
 };
 

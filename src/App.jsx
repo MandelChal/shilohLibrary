@@ -11,6 +11,7 @@ import { Bell, RefreshCw } from 'lucide-react';
 import NotificationCenter from './components/NotificationCenter';
 import BorrowedBooks from './components/BorrowedBooks';
 import ReturnRequestsManagement from './components/ReturnRequestsManagement';
+import TimePicker from './components/TimePicker';
 
 // Utils
 import {
@@ -60,7 +61,22 @@ import {
   updateLoanRequestStatus,
   deleteLoanRequest,
   sendLoanRequestNotification,
-  notifyAdminNewRequest
+  notifyAdminNewRequest,
+  createReturnEvent,
+  createAdminReturnEvent,
+  checkOverdueBooks,
+  notifyAdminsAboutOverdueBooks,
+  createAutomaticReturnEvents,
+  validatePhoneNumber,
+  formatPhoneNumber,
+  validateUserPhoneNumber,
+  addLoanRequestWithPhoneValidation,
+  EVENT_TYPES,
+  getEventColor,
+  getEventIcon,
+  isEventVisibleToUser,
+  filterEventsByVisibility,
+  createEventWithType
 } from './utils/dbHelpers';
 
 // Firebase config
@@ -154,6 +170,13 @@ export const BookEditor = ({ book, onSave, onCancel, isNew = false }) => {
     try {
       await onSave(formData);
       console.log('ספר נשמר בהצלחה');
+
+      // הצגת הודעת הצלחה
+      const action = isNew ? 'נוסף' : 'עודכן';
+      alert(`הספר "${formData.title}" ${action} בהצלחה!`);
+
+      // סגירה אוטומטית של החלונית
+      onCancel();
     } catch (error) {
       console.error('שגיאה בשמירת ספר:', error);
       alert('שגיאה בשמירת הספר: ' + error.message);
@@ -382,7 +405,6 @@ const BookCatalog = ({ books, setBooks, user, categories }) => {
 
       setShowBookEditor(false);
       setEditingBook(null);
-      alert(`הספר "${bookData.title}" ${editingBook ? 'עודכן' : 'נוסף'} בהצלחה!`);
     } catch (error) {
       alert('שגיאה בשמירת הספר: ' + error.message);
       throw error;
@@ -581,6 +603,33 @@ export default function LibrarySystem() {
     initializeData();
   }, []);
 
+  // בדיקת ספרים שפג תוקפם - פעם ביום
+  useEffect(() => {
+    const checkOverdue = async () => {
+      try {
+        await checkOverdueBooks();
+      } catch (error) {
+        console.error('שגיאה בבדיקת ספרים שפג תוקפם:', error);
+      }
+    };
+
+    // בדיקה ראשונית
+    checkOverdue();
+
+    // בדיקה יומית בשעה 9:00
+    const now = new Date();
+    const nextCheck = new Date();
+    nextCheck.setHours(9, 0, 0, 0);
+    if (nextCheck <= now) {
+      nextCheck.setDate(nextCheck.getDate() + 1);
+    }
+
+    const timeUntilNextCheck = nextCheck.getTime() - now.getTime();
+    const interval = setInterval(checkOverdue, 24 * 60 * 60 * 1000); // 24 שעות
+
+    return () => clearInterval(interval);
+  }, []);
+
   // טעינת חגים יהודיים
   useEffect(() => {
     try {
@@ -678,14 +727,14 @@ export default function LibrarySystem() {
         description: newEvent.description.trim(),
         time: newEvent.time.trim(),
         date: selected.toISOString(),
-        createdAt: new Date().toISOString(),
         createdBy: user.name,
         userId: user.id || user.username,
-        isPersonal: true,
-        eventType: 'book_borrow'
+        isPersonal: true
       };
 
-      await addEvent(eventData);
+      // יצירת אירוע עם סוג מתאים לפי תפקיד המשתמש
+      const eventType = user.role === 'admin' ? 'admin_event' : 'personal';
+      await createEventWithType(eventData, eventType);
       setNewEvent({ title: "", description: "", time: "" });
       setPanelOpen(false);
     } catch (error) {
@@ -966,17 +1015,22 @@ export default function LibrarySystem() {
 
                           <div className="space-y-0.5">
                             {dayEvents.slice(0, holidays.length > 0 ? 1 : 2).map((ev) => {
-                              let eventColor = 'bg-emerald-100 border-emerald-200 text-emerald-800';
-
-                              if (ev.eventType === 'book_borrow' || ev.type === 'book_return') {
-                                eventColor = 'bg-cyan-100 border-cyan-200 text-cyan-800';
+                              // בדיקת נראות האירוע למשתמש הנוכחי
+                              if (!isEventVisibleToUser(ev, user.id || user.username, user.role)) {
+                                return null;
                               }
+
+                              // קבלת צבע ואייקון לפי סוג האירוע
+                              const eventColor = ev.color || getEventColor(ev.type || ev.eventType);
+                              const eventIcon = ev.icon || getEventIcon(ev.type || ev.eventType);
 
                               return (
                                 <div
                                   key={ev.id}
                                   className={`truncate rounded-md px-1.5 py-0.5 text-[9px] border ${eventColor}`}
+                                  title={`${ev.description || ''}\nסוג: ${ev.type || ev.eventType || 'לא מוגדר'}`}
                                 >
+                                  <span className="mr-1">{eventIcon}</span>
                                   {ev.time ? `${ev.time} ` : ""}
                                   {ev.title}
                                 </div>
@@ -1118,11 +1172,11 @@ export default function LibrarySystem() {
               </label>
               <label className="block text-sm">
                 שעה (אופציונלי)
-                <input
-                  className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                <TimePicker
                   value={newEvent.time}
-                  onChange={(e) => setNewEvent((s) => ({ ...s, time: e.target.value }))}
-                  placeholder="למשל 18:30"
+                  onChange={(time) => setNewEvent((s) => ({ ...s, time }))}
+                  placeholder="בחר שעה או הקלד (HH:MM)"
+                  className="mt-1"
                 />
               </label>
               <label className="block text-sm">
