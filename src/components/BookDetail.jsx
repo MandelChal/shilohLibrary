@@ -1,14 +1,18 @@
-// src/components/BookDetail.jsx
+// שחזור מערכת בקשות השאלה - קבצים נוספים נדרשים
+
+// 1. BookDetail.jsx - עם מערכת בקשות השאלה מלאה
 import React, { useState } from 'react';
 import { X, Edit2, Trash2, Heart, Star, FileText, MapPin, Bell } from 'lucide-react';
-import { getStatusColor, getStatusText, getCategoryColor, formatBookLocation } from '../utils/bookHelpers';
+import { getStatusColor, getStatusText, getCategoryColor } from '../utils/bookHelpers';
 import {
     addLoanRequest,
     updateBook,
     updateLoanRequestStatus,
-    notifyAdminNewRequest,
-    validateUserPhoneNumber,
-    addLoanRequestWithPhoneValidation
+    createAllLoanEvents,
+    notifyUserLoanRejected,
+    notifyUserLoanApproved,
+    getBooks,
+    notifyAdminNewRequest
 } from '../utils/dbHelpers';
 
 const BookDetail = ({
@@ -32,30 +36,6 @@ const BookDetail = ({
     const [submitting, setSubmitting] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [adminNotes, setAdminNotes] = useState('');
-    const [phoneValidation, setPhoneValidation] = useState({ isValid: null, error: '' });
-
-    // בדיקת תקינות מספר טלפון בזמן אמת
-    const handlePhoneChange = async (phoneNumber) => {
-        setLoanData(prev => ({ ...prev, contactPhone: phoneNumber }));
-
-        if (!phoneNumber.trim()) {
-            setPhoneValidation({ isValid: null, error: '' });
-            return;
-        }
-
-        try {
-            const validation = await validateUserPhoneNumber(
-                user.id || user.username,
-                phoneNumber.trim()
-            );
-            setPhoneValidation(validation);
-        } catch (error) {
-            setPhoneValidation({
-                isValid: false,
-                error: 'שגיאה בבדיקת מספר הטלפון'
-            });
-        }
-    };
 
     const handleLoanRequest = async (e) => {
         e.preventDefault();
@@ -67,17 +47,6 @@ const BookDetail = ({
 
         setSubmitting(true);
         try {
-            // אימות מספר הטלפון לפני שליחת הבקשה
-            const phoneValidation = await validateUserPhoneNumber(
-                user.id || user.username,
-                loanData.contactPhone.trim()
-            );
-
-            if (!phoneValidation.isValid) {
-                alert(`שגיאה באימות מספר הטלפון: ${phoneValidation.error}`);
-                return;
-            }
-
             const requestData = {
                 bookId: book.id,
                 bookTitle: book.title,
@@ -85,14 +54,15 @@ const BookDetail = ({
                 bookLocation: book.location,
                 requesterId: user.id || user.username,
                 requesterName: user.name,
-                contactPhone: phoneValidation.formattedNumber, // מספר מאומת ומעוצב
+                contactPhone: loanData.contactPhone.trim(),
                 notes: loanData.notes.trim(),
                 expectedReturnDate: loanData.returnDate || null,
-                status: 'pending'
+                status: 'pending',
+                createdAt: new Date().toISOString()
             };
 
-            // הוספת הבקשה למסד הנתונים עם אימות טלפון
-            await addLoanRequestWithPhoneValidation(requestData);
+            // הוספת הבקשה למסד הנתונים
+            await addLoanRequest(requestData);
 
             // עדכון סטטוס הספר ל"בעיבוד"
             await updateBook(book.id, {
@@ -109,14 +79,14 @@ const BookDetail = ({
 פרטי הבקשה:
 • ספר: ${book.title}
 • מבקש: ${user.name}
-• טלפון: ${phoneValidation.formattedNumber} ✅ מאומת
+• טלפון: ${loanData.contactPhone}
 
 הספר מועבר כעת לסטטוס "בעיבוד".
 הנהלת הספרייה תבדוק את הבקשה ותחזור אליך בהקדם.`);
 
             setShowLoanForm(false);
             setLoanData({ contactPhone: '', notes: '', returnDate: '' });
-            setPhoneValidation({ isValid: null, error: '' });
+            onClose(); // סגירת חלון פרטי הספר
 
         } catch (error) {
             console.error('שגיאה בשליחת בקשת השאלה:', error);
@@ -130,7 +100,60 @@ const BookDetail = ({
         setSubmitting(true);
         try {
             await updateLoanRequestStatus(requestId, newStatus, adminNotes);
+            const handleUpdateRequestStatus = async (requestId, newStatus) => {
+                setSubmitting(true);
+                try {
+                    const request = pendingRequests.find(r => r.id === requestId);
 
+                    await updateLoanRequestStatus(requestId, newStatus, adminNotes);
+
+                    // 🔔 שליחת הודעה למשתמש בהתאם לסטטוס
+                    if (newStatus === 'approved') {
+                        await notifyUserLoanApproved(request.requesterId, request, adminNotes);
+
+                        const returnDate = new Date();
+                        returnDate.setDate(returnDate.getDate() + 14);
+
+                        await updateBook(book.id, {
+                            status: 'borrowed',
+                            borrowedBy: request?.requesterName,
+                            borrowDate: new Date().toISOString(),
+                            expectedReturnDate: returnDate.toISOString()
+                        });
+
+                        await createAllLoanEvents(request.requesterId, request, book);
+                    }
+
+                    if (newStatus === 'rejected') {
+                        await notifyUserLoanRejected(request.requesterId, request, adminNotes);
+
+                        await updateBook(book.id, {
+                            status: 'available',
+                            processingBy: null,
+                            processingDate: null
+                        });
+                    }
+
+                    if (onUpdateRequestStatus) {
+                        await onUpdateRequestStatus(requestId, newStatus, book.id);
+                    }
+
+                    setSelectedRequest(null);
+                    setAdminNotes('');
+                    onClose();
+
+                    const statusMessage = newStatus === 'approved' ? 'הבקשה אושרה והספר הועבר למצב מושאל' :
+                        newStatus === 'rejected' ? 'הבקשה נדחתה והספר חזר למצב זמין' :
+                            'הבקשה עודכנה';
+                    alert(statusMessage);
+
+                } catch (error) {
+                    console.error('שגיאה בעדכון בקשה:', error);
+                    alert('שגיאה בעדכון הבקשה: ' + error.message);
+                } finally {
+                    setSubmitting(false);
+                }
+            };
             // אם מאשרים - עדכון סטטוס הספר למושאל
             if (newStatus === 'approved') {
                 const request = pendingRequests.find(r => r.id === requestId);
@@ -143,6 +166,11 @@ const BookDetail = ({
                     borrowDate: new Date().toISOString(),
                     expectedReturnDate: returnDate.toISOString()
                 });
+                await createAllLoanEvents(
+                    request.requesterId,
+                    request,
+                    book
+                );
             }
 
             // אם דוחים - החזרת הספר לזמין
@@ -160,7 +188,7 @@ const BookDetail = ({
 
             setSelectedRequest(null);
             setAdminNotes('');
-
+            onClose();
             const statusMessage = newStatus === 'approved' ? 'הבקשה אושרה והספר הועבר למצב מושאל' :
                 newStatus === 'rejected' ? 'הבקשה נדחתה והספר חזר למצב זמין' :
                     'הבקשה עודכנה';
@@ -309,44 +337,15 @@ const BookDetail = ({
                                     <label className="block text-sm font-medium text-blue-700 mb-1">
                                         מספר טלפון ליצירת קשר *
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type="tel"
-                                            value={loanData.contactPhone}
-                                            onChange={(e) => handlePhoneChange(e.target.value)}
-                                            className={`w-full rounded-lg border px-3 py-2 pr-10 focus:outline-none focus:ring-2 ${phoneValidation.isValid === true
-                                                ? 'border-green-300 focus:ring-green-500 bg-green-50'
-                                                : phoneValidation.isValid === false
-                                                    ? 'border-red-300 focus:ring-red-500 bg-red-50'
-                                                    : 'border-blue-300 focus:ring-blue-500'
-                                                }`}
-                                            placeholder="050-1234567"
-                                            required
-                                            disabled={submitting}
-                                        />
-                                        {phoneValidation.isValid === true && (
-                                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500">
-                                                ✅
-                                            </div>
-                                        )}
-                                        {phoneValidation.isValid === false && (
-                                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500">
-                                                ❌
-                                            </div>
-                                        )}
-                                    </div>
-                                    {phoneValidation.error && (
-                                        <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                                            <span>⚠️</span>
-                                            {phoneValidation.error}
-                                        </p>
-                                    )}
-                                    {phoneValidation.isValid === true && (
-                                        <p className="mt-1 text-sm text-green-600 flex items-center gap-1">
-                                            <span>✅</span>
-                                            מספר טלפון תקין ומאומת
-                                        </p>
-                                    )}
+                                    <input
+                                        type="tel"
+                                        value={loanData.contactPhone}
+                                        onChange={(e) => setLoanData(prev => ({ ...prev, contactPhone: e.target.value }))}
+                                        className="w-full rounded-lg border border-blue-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="050-1234567"
+                                        required
+                                        disabled={submitting}
+                                    />
                                 </div>
 
                                 <div>
@@ -379,24 +378,14 @@ const BookDetail = ({
                                 <div className="flex gap-3">
                                     <button
                                         type="submit"
-                                        disabled={submitting || !loanData.contactPhone.trim() || phoneValidation.isValid !== true}
-                                        className={`flex-1 px-4 py-2 rounded-lg transition-all duration-200 ${phoneValidation.isValid === true
-                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                            : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        disabled={submitting || !loanData.contactPhone.trim()}
+                                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {submitting ? 'שולח בקשה...' :
-                                            phoneValidation.isValid === true ? 'שלח בקשה' :
-                                                phoneValidation.isValid === false ? 'תקן את מספר הטלפון' :
-                                                    'בדוק את מספר הטלפון'}
+                                        {submitting ? 'שולח בקשה...' : 'שלח בקשה'}
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setShowLoanForm(false);
-                                            setLoanData({ contactPhone: '', notes: '', returnDate: '' });
-                                            setPhoneValidation({ isValid: null, error: '' });
-                                        }}
+                                        onClick={() => setShowLoanForm(false)}
                                         disabled={submitting}
                                         className="px-4 py-2 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 disabled:opacity-50"
                                     >
@@ -407,7 +396,7 @@ const BookDetail = ({
                         </div>
                     )}
 
-                    {/* אם הספר מושאל - הצגת מידע */}
+                    {/* סטטוסי ספר אחרים */}
                     {book.status === 'borrowed' && (
                         <div className="mb-4 p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
                             <div className="text-center">
@@ -423,7 +412,18 @@ const BookDetail = ({
                         </div>
                     )}
 
-                    {/* אם הספר בתחזוקה */}
+                    {book.status === 'processing' && (
+                        <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                            <div className="text-center">
+                                <div className="flex items-center justify-center gap-2 mb-1">
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                    <span className="text-sm font-medium text-blue-700">בעיבוד</span>
+                                </div>
+                                <p className="text-xs text-blue-600">הבקשה נבדקת על ידי הנהלת הספרייה</p>
+                            </div>
+                        </div>
+                    )}
+
                     {book.status === 'maintenance' && (
                         <div className="mb-4 p-3 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl border border-red-200">
                             <div className="text-center">
@@ -436,6 +436,7 @@ const BookDetail = ({
                         </div>
                     )}
 
+                    {/* פרטי הספר */}
                     <div className="border-t pt-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div className="text-right">

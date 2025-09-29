@@ -2,7 +2,6 @@
 import React from 'react';
 import { User, Star, MapPin, Bell, Edit2, Trash2, Heart, ArrowRight } from 'lucide-react';
 import { getStatusColor, getStatusText, getCategoryColor, formatBookLocation } from '../utils/bookHelpers';
-
 const BookCard = ({
     book,
     favorites,

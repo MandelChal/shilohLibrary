@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Book, Search, Filter, Heart, Plus, RefreshCw, Bell } from 'lucide-react';
 import BookCard from './BookCard';
 import BookDetail from './BookDetail';
+import { filterBooks } from '../utils/bookHelpers';
 import BookEditor from './BookEditor';
 
 import {
@@ -12,7 +13,7 @@ import {
     getLoanRequests,
     updateLoanRequestStatus
 } from '../utils/dbHelpers';
-import { filterBooks } from '../utils/bookHelpers';
+
 
 const BookCatalog = ({ books, setBooks, user, categories, onBooksChange }) => {
     const [searchQuery, setSearchQuery] = useState('');

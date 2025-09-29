@@ -6,7 +6,8 @@ import {
     updateLoanRequestStatus,
     updateBook,
     getBooks,
-    sendLoanRequestNotification
+    sendLoanRequestNotification,
+    deleteAllLoanEvents
 } from '../utils/dbHelpers';
 
 export default function ReturnRequestsManagement({ currentUser }) {
@@ -67,7 +68,7 @@ export default function ReturnRequestsManagement({ currentUser }) {
                 returnDate: new Date().toISOString(),
                 returnApprovedBy: currentUser.name
             });
-
+            await deleteAllLoanEvents(requestId);
             // עדכון הרשימה המקומית
             setReturnRequests(prev => prev.filter(req => req.id !== requestId));
 
@@ -102,6 +103,7 @@ export default function ReturnRequestsManagement({ currentUser }) {
 
         if (diffDays === 0) return 'הושאל היום';
         if (diffDays === 1) return 'הושאל אתמול';
+
         return `הושאל לפני ${diffDays} ימים`;
     };
 

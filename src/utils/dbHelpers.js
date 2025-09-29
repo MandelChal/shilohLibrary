@@ -19,6 +19,526 @@ import {
 
 import { db, isFirebaseEnabled } from './firebase';
 
+const createNotificationHash = (notificationData) => {
+    const hashString = `${notificationData.userId}_${notificationData.title}_${notificationData.relatedType}_${notificationData.relatedId}`;
+    return hashString.replace(/\s+/g, '_').toLowerCase();
+};
+
+// ------------------------------------------------------
+// 🔍 בדיקת קיום הודעה דומה
+// ------------------------------------------------------
+
+const checkDuplicateNotification = async (notificationData, timeWindowHours = 24) => {
+    try {
+        const notifications = await getNotifications(notificationData.userId);
+        const now = new Date();
+        const timeWindow = timeWindowHours * 60 * 60 * 1000;
+
+        return notifications.some(notif => {
+            const notifTime = new Date(notif.createdAt);
+            const timeDiff = now - notifTime;
+
+            return (
+                notif.title === notificationData.title &&
+                notif.relatedType === notificationData.relatedType &&
+                notif.relatedId === notificationData.relatedId &&
+                timeDiff < timeWindow
+            );
+        });
+    } catch (error) {
+        console.error('שגיאה בבדיקת כפילות הודעות:', error);
+        return false;
+    }
+};
+
+// ------------------------------------------------------
+// ➕ הוספת הודעה חדשה עם בדיקת כפילויות
+// ------------------------------------------------------
+
+export const addNotificationSafe = async (notificationData) => {
+    try {
+        // בדיקת כפילות
+        const isDuplicate = await checkDuplicateNotification(notificationData);
+
+        if (isDuplicate) {
+            console.log('הודעה דומה כבר קיימת, לא נוצרת הודעה חדשה');
+            return null;
+        }
+
+        // יצירת hash ייחודי
+        const notificationHash = createNotificationHash(notificationData);
+
+        const enhancedNotification = {
+            ...notificationData,
+            notificationHash,
+            createdAt: new Date().toISOString(),
+            read: false
+        };
+
+        if (!isFirebaseEnabled) {
+            const saved = localStorage.getItem('libraryNotifications');
+            const notifications = saved ? JSON.parse(saved) : [];
+
+            const newNotification = {
+                id: Date.now().toString(),
+                ...enhancedNotification
+            };
+
+            notifications.unshift(newNotification);
+            localStorage.setItem('libraryNotifications', JSON.stringify(notifications));
+
+            console.log('✅ הודעה חדשה נוצרה:', newNotification.title);
+            return newNotification;
+        }
+
+        const docRef = await addDoc(collection(db, 'notifications'), {
+            ...enhancedNotification,
+            createdAt: serverTimestamp()
+        });
+
+        console.log('✅ הודעה חדשה נוצרה ב-Firebase:', notificationData.title);
+        return { id: docRef.id, ...enhancedNotification };
+
+    } catch (error) {
+        console.error('שגיאה בהוספת הודעה:', error);
+        throw error;
+    }
+};
+
+// ------------------------------------------------------
+// 🧹 ניקוי הודעות ישנות (למנוע בלאגן)
+// ------------------------------------------------------
+
+export const cleanOldNotifications = async (userId, daysToKeep = 30) => {
+    try {
+        const notifications = await getNotifications(userId);
+        const now = new Date();
+        const cutoffDate = new Date(now - daysToKeep * 24 * 60 * 60 * 1000);
+
+        let deletedCount = 0;
+
+        for (const notification of notifications) {
+            const notifDate = new Date(notification.createdAt);
+            if (notifDate < cutoffDate && notification.read) {
+                await deleteNotification(notification.id);
+                deletedCount++;
+            }
+        }
+
+        console.log(`🧹 נמחקו ${deletedCount} הודעות ישנות`);
+        return deletedCount;
+
+    } catch (error) {
+        console.error('שגיאה בניקוי הודעות ישנות:', error);
+        return 0;
+    }
+};
+
+// ------------------------------------------------------
+// 📅 מערכת תזכורות אוטומטית יומית
+// ------------------------------------------------------
+
+export const checkAndSendReturnReminders = async () => {
+    try {
+        console.log('🔔 בודק תזכורות החזרה...');
+
+        const loanRequests = await getLoanRequests();
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        let remindersSent = 0;
+
+        for (const request of loanRequests) {
+            if (request.status !== 'approved') continue;
+            if (!request.expectedReturnDate) continue;
+
+            const returnDate = new Date(request.expectedReturnDate);
+            returnDate.setHours(0, 0, 0, 0);
+
+            const daysUntilReturn = Math.ceil((returnDate - now) / (1000 * 60 * 60 * 24));
+
+            // תזכורת יום לפני
+            if (daysUntilReturn === 1) {
+                await addNotificationSafe({
+                    userId: request.requesterId,
+                    title: '⏰ תזכורת: החזרת ספר מחר',
+                    message: `הספר "${request.bookTitle}" אמור להיות מוחזר מחר (${returnDate.toLocaleDateString('he-IL')}).\n\nאנא דאג להחזיר את הספר במועד.`,
+                    type: 'warning',
+                    relatedId: request.id,
+                    relatedType: 'return_reminder_1day',
+                    bookId: request.bookId,
+                    bookTitle: request.bookTitle
+                });
+                remindersSent++;
+            }
+
+            // התראה על איחור
+            if (daysUntilReturn < 0) {
+                const daysOverdue = Math.abs(daysUntilReturn);
+
+                await addNotificationSafe({
+                    userId: request.requesterId,
+                    title: '🚨 ספר באיחור!',
+                    message: `הספר "${request.bookTitle}" אמור היה להיות מוחזר לפני ${daysOverdue} ימים.\n\nאנא החזר את הספר בהקדם האפשרי.`,
+                    type: 'error',
+                    relatedId: request.id,
+                    relatedType: 'overdue_alert',
+                    bookId: request.bookId,
+                    bookTitle: request.bookTitle
+                });
+                remindersSent++;
+            }
+        }
+
+        console.log(`✅ נשלחו ${remindersSent} תזכורות`);
+        return remindersSent;
+
+    } catch (error) {
+        console.error('שגיאה בבדיקת תזכורות:', error);
+        return 0;
+    }
+};
+
+// ------------------------------------------------------
+// 📊 התראה למנהלים על ספרים באיחור
+// ------------------------------------------------------
+
+export const notifyAdminsAboutOverdueBooks = async () => {
+    try {
+        const loanRequests = await getLoanRequests();
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        const overdueBooks = loanRequests.filter(request => {
+            if (request.status !== 'approved' || !request.expectedReturnDate) return false;
+
+            const returnDate = new Date(request.expectedReturnDate);
+            returnDate.setHours(0, 0, 0, 0);
+
+            return returnDate < now;
+        }).map(request => {
+            const returnDate = new Date(request.expectedReturnDate);
+            const daysOverdue = Math.ceil((now - returnDate) / (1000 * 60 * 60 * 24));
+            return { ...request, daysOverdue };
+        });
+
+        if (overdueBooks.length === 0) {
+            console.log('✅ אין ספרים באיחור');
+            return;
+        }
+
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        const message = `📚 דוח ספרים באיחור - ${now.toLocaleDateString('he-IL')}
+
+סה"כ ${overdueBooks.length} ספרים באיחור:
+
+${overdueBooks.map(book =>
+            `• "${book.bookTitle}" - ${book.requesterName}\n  📞 ${book.contactPhone} | ⏱️ איחור: ${book.daysOverdue} ימים`
+        ).join('\n\n')}
+
+יש ליצור קשר עם המשאילים להחזרת הספרים.`;
+
+        for (const admin of admins) {
+            await addNotificationSafe({
+                userId: admin.id,
+                title: `📊 דוח איחורים - ${overdueBooks.length} ספרים`,
+                message,
+                type: 'warning',
+                relatedType: 'overdue_report',
+                relatedId: `overdue_${now.toISOString().split('T')[0]}`
+            });
+        }
+
+        console.log(`✅ דוח איחורים נשלח ל-${admins.length} מנהלים`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת דוח איחורים:', error);
+    }
+};
+
+// ------------------------------------------------------
+// 🎯 הודעות ממוקדות לפי שלב
+// ------------------------------------------------------
+
+// 1️⃣ הודעה למנהל על בקשה חדשה
+export const notifyAdminNewLoanRequest = async (requestData) => {
+    try {
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        const message = `📖 בקשת השאלה חדשה התקבלה
+
+ספר: "${requestData.bookTitle}"
+מבקש: ${requestData.requesterName}
+טלפון: ${requestData.contactPhone}
+${requestData.expectedReturnDate ? `\nתאריך החזרה מבוקש: ${new Date(requestData.expectedReturnDate).toLocaleDateString('he-IL')}` : ''}
+${requestData.notes ? `\n\nהערות המשתמש:\n${requestData.notes}` : ''}
+
+⏳ הבקשה ממתינה לאישורך במערכת הניהול.`;
+
+        for (const admin of admins) {
+            await addNotificationSafe({
+                userId: admin.id,
+                title: '🆕 בקשת השאלה חדשה',
+                message,
+                type: 'info',
+                relatedId: requestData.id,
+                relatedType: 'new_loan_request',
+                bookId: requestData.bookId,
+                bookTitle: requestData.bookTitle
+            });
+        }
+
+        console.log(`✅ הודעה על בקשה חדשה נשלחה ל-${admins.length} מנהלים`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעה למנהלים:', error);
+    }
+};
+
+// 2️⃣ הודעה למשתמש על אישור השאלה
+export const notifyUserLoanApproved = async (userId, requestData, adminNotes = '') => {
+    try {
+        const returnDate = requestData.expectedReturnDate
+            ? new Date(requestData.expectedReturnDate).toLocaleDateString('he-IL')
+            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL');
+
+        const location = requestData.bookLocation
+            ? `${requestData.bookLocation.color} ${requestData.bookLocation.letter}${requestData.bookLocation.number}`
+            : 'פנה לספרן לקבלת המיקום';
+
+        const message = `✅ הבקשה שלך אושרה!
+
+הספר "${requestData.bookTitle}" זמין להשאלה עד תאריך ${returnDate}.
+
+📍 מיקום הספר: ${location}
+
+🔑 לאיסוף הספר:
+• פנה לספרן עם תעודת זהות
+• ציין את שם הספר והמחבר
+
+${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
+
+⏰ תקבל תזכורת יום לפני מועד ההחזרה.
+
+בהצלחה בלימודים! 📚`;
+
+        await addNotificationSafe({
+            userId,
+            title: '🎉 בקשת ההשאלה אושרה!',
+            message,
+            type: 'success',
+            relatedId: requestData.id,
+            relatedType: 'loan_approved',
+            bookId: requestData.bookId,
+            bookTitle: requestData.bookTitle
+        });
+
+        console.log(`✅ הודעת אישור נשלחה למשתמש ${requestData.requesterName}`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעת אישור:', error);
+    }
+};
+
+// 3️⃣ הודעה למשתמש על דחיית בקשה
+export const notifyUserLoanRejected = async (userId, requestData, adminNotes = '') => {
+    try {
+        const message = `❌ בקשת ההשאלה נדחתה
+
+הבקשה לספר "${requestData.bookTitle}" לא אושרה.
+
+${adminNotes ? `📝 סיבת הדחיה:\n${adminNotes}\n\n` : ''}הספר עשוי להיות מושאל כרגע או בתחזוקה.
+
+💡 מה אפשר לעשות?
+• פנה לספרן לברר פרטים נוספים
+• בקש ספר חלופי בנושא דומה
+• נסה שוב במועד מאוחר יותר`;
+
+        await addNotificationSafe({
+            userId,
+            title: '⚠️ בקשת השאלה נדחתה',
+            message,
+            type: 'error',
+            relatedId: requestData.id,
+            relatedType: 'loan_rejected',
+            bookId: requestData.bookId,
+            bookTitle: requestData.bookTitle
+        });
+
+        console.log(`✅ הודעת דחייה נשלחה למשתמש ${requestData.requesterName}`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעת דחייה:', error);
+    }
+};
+
+// 4️⃣ הודעה על בקשת החזרה (למשתמש ולמנהל)
+export const notifyReturnRequest = async (requestData) => {
+    try {
+        // הודעה למשתמש
+        await addNotificationSafe({
+            userId: requestData.requesterId,
+            title: '📬 בקשת החזרה התקבלה',
+            message: `בקשת ההחזרה שלך לספר "${requestData.bookTitle}" התקבלה במערכת.\n\n✅ הספרן יבדוק את הבקשה ויאשר את ההחזרה בהקדם.\n\nתקבל הודעה כאשר ההחזרה תאושר.`,
+            type: 'info',
+            relatedId: requestData.id,
+            relatedType: 'return_request_received',
+            bookId: requestData.bookId,
+            bookTitle: requestData.bookTitle
+        });
+
+        // הודעה למנהלים
+        const users = await getUsers();
+        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+
+        for (const admin of admins) {
+            await addNotificationSafe({
+                userId: admin.id,
+                title: '📥 בקשת החזרת ספר',
+                message: `המשתמש ${requestData.requesterName} ביקש להחזיר ספר:\n\n📖 "${requestData.bookTitle}"\n📞 ${requestData.contactPhone}\n\n✅ יש לבדוק ולאשר את החזרת הספר במערכת.`,
+                type: 'info',
+                relatedId: requestData.id,
+                relatedType: 'return_request_admin',
+                bookId: requestData.bookId,
+                bookTitle: requestData.bookTitle
+            });
+        }
+
+        console.log(`✅ הודעות החזרה נשלחו למשתמש ול-${admins.length} מנהלים`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעות החזרה:', error);
+    }
+};
+
+// 5️⃣ הודעה על החזרה שאושרה
+export const notifyReturnCompleted = async (userId, requestData, adminNotes = '') => {
+    try {
+        const message = `✅ הספר הוחזר בהצלחה!
+
+הספר "${requestData.bookTitle}" הוחזר לספרייה.
+
+תודה רבה על השימוש בשירותי הספרייה! 🙏
+
+${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
+
+מוזמן לשאול ספרים נוספים בכל עת.`;
+
+        await addNotificationSafe({
+            userId,
+            title: '✨ החזרה הושלמה',
+            message,
+            type: 'success',
+            relatedId: requestData.id,
+            relatedType: 'return_completed',
+            bookId: requestData.bookId,
+            bookTitle: requestData.bookTitle
+        });
+
+        console.log(`✅ הודעת החזרה הושלמה נשלחה למשתמש`);
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעת החזרה:', error);
+    }
+};
+
+// ------------------------------------------------------
+// ⚙️ פונקציה מרכזית לניהול הודעות לפי סטטוס
+// ------------------------------------------------------
+
+export const sendLoanStatusNotification = async (userId, requestData, newStatus, adminNotes = '') => {
+    try {
+        switch (newStatus) {
+            case 'approved':
+                await notifyUserLoanApproved(userId, requestData, adminNotes);
+                await createAllLoanEvents(userId, requestData, {
+                    id: requestData.bookId,
+                    title: requestData.bookTitle,
+                    author: requestData.bookAuthor,
+                    location: requestData.bookLocation
+                });
+                break;
+
+            case 'rejected':
+                await notifyUserLoanRejected(userId, requestData, adminNotes);
+                break;
+
+            case 'pending_return':
+                await notifyReturnRequest(requestData);
+                break;
+
+            case 'returned':
+                await notifyReturnCompleted(userId, requestData, adminNotes);
+
+                // מחיקת אירועי החזרה מהלוח שנה
+                const events = await getEvents();
+                const userBookEvents = events.filter(event =>
+                    event.userId === userId &&
+                    event.bookId === requestData.bookId &&
+                    (event.type === 'book_loan' || event.type === 'book_return')
+                );
+
+                for (const event of userBookEvents) {
+                    await deleteEvent(event.id);
+                }
+                break;
+        }
+
+    } catch (error) {
+        console.error('שגיאה בשליחת הודעת סטטוס:', error);
+    }
+};
+
+// ------------------------------------------------------
+// 🤖 פונקציה להפעלה יומית אוטומטית
+// ------------------------------------------------------
+
+export const runDailyNotificationTasks = async () => {
+    try {
+        console.log('🤖 מפעיל משימות הודעות יומיות...');
+
+        // תזכורות החזרה
+        const reminders = await checkAndSendReturnReminders();
+
+        // דוח איחורים למנהלים
+        await notifyAdminsAboutOverdueBooks();
+
+        // ניקוי הודעות ישנות (למשתמשים שקראו אותן)
+        const users = await getUsers();
+        let totalCleaned = 0;
+
+        for (const user of users) {
+            const cleaned = await cleanOldNotifications(user.id, 30);
+            totalCleaned += cleaned;
+        }
+
+        console.log(`✅ משימות יומיות הושלמו: ${reminders} תזכורות, ${totalCleaned} הודעות נוקו`);
+
+    } catch (error) {
+        console.error('שגיאה במשימות יומיות:', error);
+    }
+};
+
+// // ------------------------------------------------------
+// // 📤 ייצוא כל הפונקציות
+// // ------------------------------------------------------
+
+// export {
+//     addNotificationSafe as addNotification,
+//     checkDuplicateNotification,
+//     cleanOldNotifications,
+//     checkAndSendReturnReminders,
+//     notifyAdminNewLoanRequest,
+//     notifyUserLoanApproved,
+//     notifyUserLoanRejected,
+//     notifyReturnRequest,
+//     notifyReturnCompleted,
+//     sendLoanStatusNotification,
+//     runDailyNotificationTasks
+// };
 // מהארטיפקט הקודם - כל הפונקציות הקיימות
 export const loginUser = async (username, password) => {
     console.log('מנסה התחברות עם:', username);
@@ -554,11 +1074,6 @@ export const updateLoanRequestStatus = async (requestId, newStatus, adminNotes =
         );
         localStorage.setItem('libraryLoanRequests', JSON.stringify(updatedRequests));
 
-        // שליחת הודעה למשתמש
-        const request = requests.find(r => r.id === requestId);
-        if (request) {
-            await sendLoanRequestNotification(request.requesterId, request, newStatus, adminNotes);
-        }
 
         return;
     }
@@ -572,11 +1087,11 @@ export const updateLoanRequestStatus = async (requestId, newStatus, adminNotes =
         });
 
         // קבלת נתוני הבקשה לשליחת הודעה
-        const requestDoc = await getDoc(requestRef);
-        if (requestDoc.exists()) {
-            const requestData = { id: requestDoc.id, ...requestDoc.data() };
-            await sendLoanRequestNotification(requestData.requesterId, requestData, newStatus, adminNotes);
-        }
+        // const requestDoc = await getDoc(requestRef);
+        // if (requestDoc.exists()) {
+        //     const requestData = { id: requestDoc.id, ...requestDoc.data() };
+        //     await sendLoanRequestNotification(requestData.requesterId, requestData, newStatus, adminNotes);
+        // }
 
     } catch (error) {
         console.error('שגיאה בעדכון סטטוס בקשת השאלה:', error);
@@ -1222,72 +1737,41 @@ export const checkOverdueBooks = async () => {
     }
 };
 
-// התראה למנהלים על ספרים שפג תוקפם
-export const notifyAdminsAboutOverdueBooks = async (overdueBooks) => {
-    try {
-        const users = await getUsers();
-        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
+// // התראה למנהלים על ספרים שפג תוקפם
+// export const notifyAdminsAboutOverdueBooks = async (overdueBooks) => {
+//     try {
+//         const users = await getUsers();
+//         const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
 
-        for (const admin of admins) {
-            const overdueCount = overdueBooks.length;
-            const message = `יש ${overdueCount} ספרים שפג תוקפם:
+//         for (const admin of admins) {
+//             const overdueCount = overdueBooks.length;
+//             const message = `יש ${overdueCount} ספרים שפג תוקפם:
 
-${overdueBooks.map(book =>
-                `• "${book.bookTitle}" - ${book.requesterName} (${book.daysOverdue} ימים)`
-            ).join('\n')}
+// ${overdueBooks.map(book =>
+//                 `• "${book.bookTitle}" - ${book.requesterName} (${book.daysOverdue} ימים)`
+//             ).join('\n')}
 
-יש ליצור קשר עם המשאילים להחזרת הספרים.`;
+// יש ליצור קשר עם המשאילים להחזרת הספרים.`;
 
-            const notificationData = {
-                userId: admin.id,
-                title: `התראה: ${overdueCount} ספרים שפג תוקפם`,
-                message,
-                type: 'warning',
-                relatedType: 'overdue_books',
-                createdAt: new Date().toISOString(),
-                read: false
-            };
+//             const notificationData = {
+//                 userId: admin.id,
+//                 title: `התראה: ${overdueCount} ספרים שפג תוקפם`,
+//                 message,
+//                 type: 'warning',
+//                 relatedType: 'overdue_books',
+//                 createdAt: new Date().toISOString(),
+//                 read: false
+//             };
 
-            await addNotificationWithDuplicateCheck(notificationData);
-        }
+//             await addNotificationWithDuplicateCheck(notificationData);
+//         }
 
-        console.log(`התראה על ${overdueBooks.length} ספרים שפג תוקפם נשלחה ל-${admins.length} מנהלים`);
-    } catch (error) {
-        console.error('שגיאה בשליחת התראה על ספרים שפג תוקפם:', error);
-    }
-};
+//         console.log(`התראה על ${overdueBooks.length} ספרים שפג תוקפם נשלחה ל-${admins.length} מנהלים`);
+//     } catch (error) {
+//         console.error('שגיאה בשליחת התראה על ספרים שפג תוקפם:', error);
+//     }
+// };
 
-// פונקציה מעודכנת ליצירת אירועי החזרה אוטומטיים
-export const createAutomaticReturnEvents = async (requestData, userId) => {
-    try {
-        // יצירת אירוע החזרה למשתמש
-        const returnDate = requestData.expectedReturnDate
-            ? new Date(requestData.expectedReturnDate)
-            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 ימים מהתאריך הנוכחי
-
-        const bookData = {
-            id: requestData.bookId,
-            title: requestData.bookTitle,
-            author: requestData.bookAuthor,
-            location: requestData.bookLocation
-        };
-
-        // יצירת אירוע למשתמש
-        await createReturnEvent(userId, bookData, returnDate);
-
-        // יצירת אירוע מעקב למנהלים
-        const users = await getUsers();
-        const admins = users.filter(user => user.role === 'admin' && user.isActive !== false);
-
-        for (const admin of admins) {
-            await createAdminReturnEvent(admin.id, bookData, requestData.requesterName, returnDate);
-        }
-
-        console.log(`אירועי החזרה אוטומטיים נוצרו עבור ספר: ${requestData.bookTitle}`);
-    } catch (error) {
-        console.error('שגיאה ביצירת אירועי החזרה אוטומטיים:', error);
-    }
-};
 
 // ------------------------------------------------------
 // 📱 מערכת אימות מספרי טלפון
@@ -1517,6 +2001,178 @@ export const createEventWithType = async (eventData, eventType = 'personal') => 
     } catch (error) {
         console.error('שגיאה ביצירת אירוע עם סוג:', error);
         throw error;
+    }
+};
+// ------------------------------------------------------
+// 📅 מערכת אירועי לוח שנה עם קידוד צבעים
+// ------------------------------------------------------
+
+export const CALENDAR_EVENT_TYPES = {
+    BOOK_LOAN: {
+        type: 'book_loan',
+        name: 'השאלת ספר',
+        color: '#10b981',
+        bgColor: 'bg-green-100',
+        borderColor: 'border-green-400',
+        textColor: 'text-green-800',
+        icon: '📚'
+    },
+    BOOK_RETURN: {
+        type: 'book_return',
+        name: 'החזרת ספר',
+        color: '#f59e0b',
+        bgColor: 'bg-orange-100',
+        borderColor: 'border-orange-400',
+        textColor: 'text-orange-800',
+        icon: '📖'
+    },
+    ADMIN_PUBLIC: {
+        type: 'admin_public',
+        name: 'אירוע ציבורי',
+        color: '#3b82f6',
+        bgColor: 'bg-blue-100',
+        borderColor: 'border-blue-400',
+        textColor: 'text-blue-800',
+        icon: '📢'
+    },
+    ADMIN_TRACKING: {
+        type: 'admin_tracking',
+        name: 'מעקב אדמין',
+        color: '#8b5cf6',
+        bgColor: 'bg-purple-100',
+        borderColor: 'border-purple-400',
+        textColor: 'text-purple-800',
+        icon: '👁️'
+    },
+    OVERDUE_ALERT: {
+        type: 'overdue_alert',
+        name: 'ספר באיחור',
+        color: '#ef4444',
+        bgColor: 'bg-red-100',
+        borderColor: 'border-red-400',
+        textColor: 'text-red-800',
+        icon: '⚠️'
+    }
+};
+
+export const createAllLoanEvents = async (userId, loanRequest, bookData) => {
+    try {
+        console.log('יוצר אירועי לוח שנה עבור השאלת ספר...');
+
+        const returnDate = loanRequest.expectedReturnDate
+            ? new Date(loanRequest.expectedReturnDate)
+            : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+        // 1. אירוע החזרה למשתמש (כתום) - רק למשתמש שהשאיל
+        await addEvent({
+            title: `החזרה: ${bookData.title}`,
+            description: `תזכורת להחזרת ספר לספרייה\n📚 ${bookData.title}\n✍️ ${bookData.author}\n📅 יש להחזיר היום!`,
+            date: returnDate.toISOString(),
+            time: '09:00',
+            type: CALENDAR_EVENT_TYPES.BOOK_RETURN.type,
+            color: CALENDAR_EVENT_TYPES.BOOK_RETURN.color,
+            icon: CALENDAR_EVENT_TYPES.BOOK_RETURN.icon,
+            userId: userId,  // רק למשתמש ספציפי
+            bookId: bookData.id,
+            bookTitle: bookData.title,
+            loanRequestId: loanRequest.id,
+            isPersonal: true,  // אירוע אישי
+            createdBy: 'מערכת אוטומטית'
+        });
+
+        // 2. אירוע מעקב למנהלים (סגול) - רק למנהלים
+        const users = await getUsers();
+        const admins = users.filter(u => u.role === 'admin' && u.isActive !== false);
+
+        for (const admin of admins) {
+            await addEvent({
+                title: `מעקב: ${bookData.title}`,
+                description: `ספר מושאל\n📚 ${bookData.title}\n👤 ${loanRequest.requesterName}\n📅 החזרה: ${returnDate.toLocaleDateString('he-IL')}`,
+                date: returnDate.toISOString(),
+                time: '18:00',
+                type: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.type,
+                color: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.color,
+                icon: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.icon,
+                userId: admin.id,  // לכל אדמין בנפרד
+                bookId: bookData.id,
+                bookTitle: bookData.title,
+                borrowerName: loanRequest.requesterName,
+                loanRequestId: loanRequest.id,
+                isPersonal: false,  // אירוע מערכת - אבל רק למנהלים
+                forAdminsOnly: true,  // ← הוסף את זה
+                createdBy: 'מערכת מעקב'
+            });
+        }
+
+        console.log('✅ אירועים נוצרו בהצלחה');
+    } catch (error) {
+        console.error('שגיאה ביצירת אירועים:', error);
+    }
+};
+// מחיקת כל האירועים הקשורים להשאלה
+export const deleteAllLoanEvents = async (loanRequestId) => {
+    try {
+        const events = await getEvents();
+        const loanEvents = events.filter(event => event.loanRequestId === loanRequestId);
+
+        for (const event of loanEvents) {
+            await deleteEvent(event.id);
+        }
+
+        console.log(`✅ נמחקו ${loanEvents.length} אירועים`);
+    } catch (error) {
+        console.error('שגיאה במחיקת אירועים:', error);
+    }
+};
+
+// התראות איחור לאדמין (אדום)
+export const createOverdueAlerts = async () => {
+    try {
+        const loanRequests = await getLoanRequests();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const overdueRequests = loanRequests.filter(request => {
+            if (request.status !== 'approved' || !request.expectedReturnDate) return false;
+            const returnDate = new Date(request.expectedReturnDate);
+            returnDate.setHours(0, 0, 0, 0);
+            return returnDate < today;
+        });
+
+        const books = await getBooks();
+        const users = await getUsers();
+        const admins = users.filter(u => u.role === 'admin' && u.isActive !== false);
+
+        for (const request of overdueRequests) {
+            const book = books.find(b => b.id === request.bookId);
+            if (!book) continue;
+
+            const daysOverdue = Math.ceil((today - new Date(request.expectedReturnDate)) / (1000 * 60 * 60 * 24));
+
+            for (const admin of admins) {
+                await addEvent({
+                    title: `איחור! ${book.title}`,
+                    description: `ספר באיחור של ${daysOverdue} ימים!
+📚 ${book.title}
+👤 ${request.requesterName}
+📞 ${request.contactPhone}
+🚨 יש ליצור קשר בהקדם!`,
+                    date: new Date().toISOString(),
+                    time: '10:00',
+                    type: CALENDAR_EVENT_TYPES.OVERDUE_ALERT.type,
+                    color: CALENDAR_EVENT_TYPES.OVERDUE_ALERT.color,
+                    icon: CALENDAR_EVENT_TYPES.OVERDUE_ALERT.icon,
+                    userId: admin.id,
+                    bookId: book.id,
+                    loanRequestId: request.id,
+                    daysOverdue: daysOverdue,
+                    isPersonal: false,
+                    createdBy: 'מערכת התראות'
+                });
+            }
+        }
+    } catch (error) {
+        console.error('שגיאה ביצירת התראות איחור:', error);
     }
 };
 
