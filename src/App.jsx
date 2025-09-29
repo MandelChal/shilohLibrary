@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { User, Settings, Calendar, LogOut, Trash2, Book, Search, Heart, MapPin, Filter, ArrowRight, Star, FileText, X, Plus, Edit2, Save, AlertCircle } from "lucide-react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { User, Settings, Calendar, LogOut, Trash2, Book, Search, Heart, MapPin, Filter, ArrowRight, Star, FileText, X, Plus, Edit2, Save, Clock } from "lucide-react";
 
 // Components
 import LoginScreen from './components/LoginScreen';
@@ -59,6 +59,174 @@ import {
 
 // Firebase config
 import { db, isFirebaseEnabled } from './utils/firebase';
+
+//שעון פשוט עם הקלדה ישירה בלבד
+const IOSTimePicker = ({ value = '', onChange = () => {}, placeholder = 'בחר שעה' }) => {
+  const [inputValue, setInputValue] = useState('');
+
+  // עדכון הערך הפנימי כשמקבלים ערך חיצוני
+  useEffect(() => {
+    if (value) {
+      setInputValue(value);
+    } else {
+      setInputValue('');
+    }
+  }, [value]);
+
+  // טיפול בהקלדה עם פורמט אוטומטי ובדיקת תקינות מתקדמת
+  const handleInputChange = (e) => {
+    let newValue = e.target.value;
+    
+    // מסנן רק מספרים
+    newValue = newValue.replace(/[^\d]/g, '');
+    
+    // מגביל ל-4 מספרים בלבד
+    if (newValue.length > 4) {
+      newValue = newValue.slice(0, 4);
+    }
+    
+    // בדיקות תקינות תוך כדי הקלדה
+    if (newValue.length >= 1) {
+      // בדיקת הספרה הראשונה של השעה (0-2)
+      const firstHourDigit = parseInt(newValue[0]);
+      if (firstHourDigit > 2) {
+        return; // לא מאפשר ספרה ראשונה גדולה מ-2
+      }
+    }
+    
+    if (newValue.length >= 2) {
+      // בדיקת השעה המלאה (00-23)
+      const hour = parseInt(newValue.slice(0, 2));
+      if (hour > 23) {
+        return; // לא מאפשר שעה גדולה מ-23
+      }
+    }
+    
+    if (newValue.length >= 3) {
+      // בדיקת הספרה הראשונה של הדקות (0-5)
+      const firstMinuteDigit = parseInt(newValue[2]);
+      if (firstMinuteDigit > 5) {
+        return; // לא מאפשר ספרה ראשונה של דקות גדולה מ-5
+      }
+      
+      // הוספת נקודתיים אוטומטית
+      newValue = newValue.slice(0, 2) + ':' + newValue.slice(2);
+    }
+    
+    if (newValue.length === 5) {
+      // בדיקת הדקות המלאות (00-59)
+      const [, minutesStr] = newValue.split(':');
+      const minutes = parseInt(minutesStr);
+      if (minutes > 59) {
+        return; // לא מאפשר דקות גדולות מ-59
+      }
+    }
+    
+    setInputValue(newValue);
+    
+    // עדכון הערך הסופי רק אם השעה תקינה לחלוטין
+    if (newValue.length === 5) {
+      const [hoursStr, minutesStr] = newValue.split(':');
+      const hours = parseInt(hoursStr, 10);
+      const minutes = parseInt(minutesStr, 10);
+      
+      // בדיקה סופית לוודא תקינות
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        onChange(newValue);
+      }
+    }
+  };
+
+  // טיפול בלחיצת מקש - מניעת תווים לא רצויים
+  const handleKeyDown = (e) => {
+    // אישור מקשי ניווט ובקרה
+    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'];
+    
+    // אישור מספרים
+    const isNumber = /^[0-9]$/.test(e.key);
+    
+    // אם זה לא מקש מותר ולא מספר - מנע
+    if (!allowedKeys.includes(e.key) && !isNumber) {
+      e.preventDefault();
+    }
+  };
+
+  // תיקון פורמט כשעוזבים את השדה
+  const handleBlur = () => {
+    if (inputValue && inputValue.length > 0 && inputValue.length < 5) {
+      let correctedValue = inputValue.replace(/[^\d]/g, ''); // מסיר נקודתיים קיימות
+      
+      // השלמה ל-4 מספרים
+      while (correctedValue.length < 4) {
+        correctedValue += '0';
+      }
+      
+      // הוספת נקודתיים
+      const finalValue = correctedValue.slice(0, 2) + ':' + correctedValue.slice(2, 4);
+      
+      // בדיקת תקינות
+      const [hoursStr, minutesStr] = finalValue.split(':');
+      const hours = parseInt(hoursStr, 10);
+      const minutes = parseInt(minutesStr, 10);
+      
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        setInputValue(finalValue);
+        onChange(finalValue);
+      } else {
+        // אם לא תקין - נקה
+        setInputValue('');
+        onChange('');
+      }
+    }
+  };
+
+  // טיפול בניקוי השדה
+  const handleClear = () => {
+    setInputValue('');
+    onChange('');
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          className="w-full rounded-xl border border-stone-300 pl-10 pr-1 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white hover:border-emerald-400 transition-colors text-right font-normal"
+          placeholder={placeholder}
+          maxLength={5}
+        />
+        
+        {/* כפתור ניקוי */}
+        {inputValue && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+        
+        {/* אייקון שעון */}
+        {!inputValue && (
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+            <Clock className="w-4 h-4" />
+          </div>
+        )}
+      </div>
+      
+      {/* הוראות שימוש */}
+      <div className="text-xs text-gray-500 mt-1 text-center">
+        הקלד 4 מספרים (למשל: 1430 → 14:30)
+      </div>
+    </div>
+  );
+};
+// עד כאן השעון החדש
 
 // נתוני ספרים להדגמה - יעמסו מ-Firebase או יישארו כ-fallback
 const initialBooks = [
@@ -2120,12 +2288,13 @@ export default function LibrarySystem() {
               </label>
               <label className="block text-sm">
                 שעה (אופציונלי)
-                <input
-                  className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                <div className="mt-1">
+                  <IOSTimePicker
                   value={newEvent.time}
-                  onChange={(e) => setNewEvent((s) => ({ ...s, time: e.target.value }))}
-                  placeholder="למשל 18:30"
+                  onChange={(time) => setNewEvent((s) => ({ ...s, time }))}
+                  placeholder="בחר שעה"
                 />
+                </div>
               </label>
               <label className="block text-sm">
                 תיאור

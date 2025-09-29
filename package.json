@@ -15,7 +15,7 @@
   "dependencies": {
     "@hebcal/core": "^5.10.1",
     "firebase": "^10.14.1",
-    "lucide-react": "^0.263.1",
+    "lucide-react": "^0.544.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
