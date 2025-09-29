@@ -174,12 +174,17 @@ export default function LibrarySystem() {
     for (const ev of events) {
       // סינון אירועים - הצג רק אירועים רלוונטיים
       if (ev.isPersonal && ev.userId !== (user.id || user.username)) {
-        continue; // דלג על אירועים אישיים של אחרים
+        continue;
       }
 
       // אירועי מעקב אדמין - רק למנהלים
       if (ev.forAdminsOnly && user.role !== 'admin') {
-        continue; // דלג על אירועי מנהלים אם המשתמש לא מנהל
+        continue;
+      }
+
+      // אם יש userId ספציפי ולא null - בדוק התאמה
+      if (ev.userId && ev.userId !== (user.id || user.username) && user.role !== 'admin') {
+        continue;
       }
 
       let jsDate;

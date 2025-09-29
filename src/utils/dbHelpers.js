@@ -2084,25 +2084,26 @@ export const createAllLoanEvents = async (userId, loanRequest, bookData) => {
         const users = await getUsers();
         const admins = users.filter(u => u.role === 'admin' && u.isActive !== false);
 
-        for (const admin of admins) {
-            await addEvent({
-                title: `מעקב: ${bookData.title}`,
-                description: `ספר מושאל\n📚 ${bookData.title}\n👤 ${loanRequest.requesterName}\n📅 החזרה: ${returnDate.toLocaleDateString('he-IL')}`,
-                date: returnDate.toISOString(),
-                time: '18:00',
-                type: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.type,
-                color: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.color,
-                icon: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.icon,
-                userId: admin.id,  // לכל אדמין בנפרד
-                bookId: bookData.id,
-                bookTitle: bookData.title,
-                borrowerName: loanRequest.requesterName,
-                loanRequestId: loanRequest.id,
-                isPersonal: false,  // אירוע מערכת - אבל רק למנהלים
-                forAdminsOnly: true,  // ← הוסף את זה
-                createdBy: 'מערכת מעקב'
-            });
-        }
+
+        await addEvent({
+            title: `מעקב: ${bookData.title}`,
+            description: `ספר מושאל\n📚 ${bookData.title}\n👤 ${loanRequest.requesterName}\n📅 החזרה: ${returnDate.toLocaleDateString('he-IL')}`,
+            date: returnDate.toISOString(),
+            time: '18:00',
+            type: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.type,
+            color: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.color,
+            icon: CALENDAR_EVENT_TYPES.ADMIN_TRACKING.icon,
+            // userId: admin.id,  // לכל אדמין בנפרד
+            userId: null,
+            bookId: bookData.id,
+            bookTitle: bookData.title,
+            borrowerName: loanRequest.requesterName,
+            loanRequestId: loanRequest.id,
+            isPersonal: false,  // אירוע מערכת - אבל רק למנהלים
+            forAdminsOnly: true,
+            createdBy: 'מערכת מעקב'
+        });
+
 
         console.log('✅ אירועים נוצרו בהצלחה');
     } catch (error) {
