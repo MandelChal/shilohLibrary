@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Save, AlertCircle, Plus, X } from 'lucide-react';
 import { getCategories } from '../utils/dbHelpers';
+// אותיות עבריות + ספרות + רווחים + סימני פיסוק בסיסיים 
+export const HEB_OR_NUM_TITLE = /^[\u0590-\u05FF0-9\s"'\-.,:;()!?]+$/;
+
 
 export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
     const [categories, setCategories] = useState([]);
@@ -18,6 +21,12 @@ export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
 
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const COLORS = ['כחול', 'ירוק', 'סגול', 'אדום', 'צהוב', 'כחול כהה', 'ורוד', 'אפור', 'כתום', 'טורקיז', 'ציאן', 'ירוק זמרגד'];
+    const LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','יא','יב','יג','יד','טו','טז'];
+    const NUMBERS = Array.from({length: 15}, (_, i) => i + 1);
+
+    
+
 
     // טעינת קטגוריות מה-DB
     useEffect(() => {
@@ -92,13 +101,18 @@ export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
                         {/* שם הספר + מחבר */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium mb-2 text-right">שם הספר</label>
+                                <label className="block text-sm font-medium mb-2 text-right">שם הספר </label>
                                 <input
                                     type="text"
                                     value={formData.title}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                                    onChange={(e) => {
+                                        const raw = e.target.value;
+                                        // משאירים רק: עברית, ספרות, רווחים, פיסוק בסיסי
+                                        const cleaned = raw.replace(/[^0-9\u0590-\u05FF\s"'\-.,:;()!?]/g, '');
+                                        setFormData(prev => ({ ...prev, title: cleaned }));
+                                      }}                                    
                                     className={`w-full p-2 border rounded text-right ${errors.title ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="הכנס שם הספר"
+                                    placeholder="הכנס שם ספר (בעברית)"
                                     disabled={saving}
                                 />
                                 {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
@@ -109,9 +123,14 @@ export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
                                 <input
                                     type="text"
                                     value={formData.author}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, author: e.target.value }))}
+                                    onChange={(e) => {
+                                        const raw = e.target.value;
+                                        // משאירים רק: עברית, ספרות, רווחים, פיסוק בסיסי
+                                        const cleaned = raw.replace(/[^0-9\u0590-\u05FF\s"'\-.,:;()!?]/g, '');
+                                        setFormData(prev => ({ ...prev, author: cleaned }));
+                                      }}
                                     className={`w-full p-2 border rounded text-right ${errors.author ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="הכנס שם המחבר"
+                                    placeholder="הכנס שם מחבר (בעברית)"
                                     disabled={saving}
                                 />
                                 {errors.author && <p className="text-red-500 text-xs mt-1">{errors.author}</p>}
@@ -158,37 +177,58 @@ export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
                             <label className="block text-sm font-medium mb-2 text-right">מיקום בספרייה</label>
                             <div className="grid grid-cols-3 gap-2">
                                 <div>
-                                    <input
-                                        type="text"
-                                        value={formData.location?.color || ''}
-                                        onChange={(e) => updateLocation('color', e.target.value)}
-                                        className={`w-full p-2 border rounded text-right ${errors.locationColor ? 'border-red-500' : 'border-gray-300'}`}
-                                        placeholder="צבע"
-                                        disabled={saving}
-                                    />
-                                    {errors.locationColor && <p className="text-red-500 text-xs mt-1">{errors.locationColor}</p>}
+                                <select
+                                    value={formData.location?.color || ''}
+                                    onChange={(e) => updateLocation('color', e.target.value)}
+                                    className={`w-full p-2 border rounded text-right ${errors.locationColor ? 'border-red-500' : 'border-gray-300'}`}
+                                    disabled={saving}
+                                    dir="rtl"
+                                    aria-invalid={!!errors.locationColor}
+                                >
+                                    <option value="">בחרי צבע</option>
+                                    {COLORS.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                                {errors.locationColor && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.locationColor}</p>
+                                )}
                                 </div>
                                 <div>
-                                    <input
-                                        type="text"
-                                        value={formData.location?.letter || ''}
-                                        onChange={(e) => updateLocation('letter', e.target.value)}
-                                        className={`w-full p-2 border rounded text-right ${errors.locationLetter ? 'border-red-500' : 'border-gray-300'}`}
-                                        placeholder="אות"
-                                        disabled={saving}
-                                    />
-                                    {errors.locationLetter && <p className="text-red-500 text-xs mt-1">{errors.locationLetter}</p>}
+                                <select
+                                    value={formData.location?.letter || ''}
+                                    onChange={(e) => updateLocation('letter', e.target.value)}
+                                    className={`w-full p-2 border rounded text-right ${errors.locationLetter ? 'border-red-500' : 'border-gray-300'}`}
+                                    disabled={saving}
+                                    dir="rtl"
+                                    aria-invalid={!!errors.locationLetter}
+                                >
+                                    <option value="">בחרי אות</option>
+                                    {LETTERS.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                                {errors.locationLetter && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.locationLetter}</p>
+                                )}
                                 </div>
                                 <div>
-                                    <input
-                                        type="text"
-                                        value={formData.location?.number || ''}
-                                        onChange={(e) => updateLocation('number', e.target.value)}
-                                        className={`w-full p-2 border rounded text-right ${errors.locationNumber ? 'border-red-500' : 'border-gray-300'}`}
-                                        placeholder="מספר"
-                                        disabled={saving}
-                                    />
-                                    {errors.locationNumber && <p className="text-red-500 text-xs mt-1">{errors.locationNumber}</p>}
+                                <select
+                                    value={formData.location?.number || ''}
+                                    onChange={(e) => updateLocation('number', e.target.value)}
+                                    className={`w-full p-2 border rounded text-right ${errors.locationNumber ? 'border-red-500' : 'border-gray-300'}`}
+                                    disabled={saving}
+                                    dir="rtl"
+                                    aria-invalid={!!errors.locationNumber}
+                                >
+                                    <option value="">בחרי מספר</option>
+                                    {NUMBERS.map((c) => (
+                                    <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                                {errors.locationNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.locationNumber}</p>
+                                )}
                                 </div>
                             </div>
                         </div>
@@ -213,7 +253,12 @@ export default function BookEditor({ book, onSave, onCancel, isNew = false }) {
                             <label className="block text-sm font-medium mb-2 text-right">תיאור</label>
                             <textarea
                                 value={formData.description}
-                                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                                onChange={(e) => {
+                                    const raw = e.target.value;
+                                    // משאירים רק: עברית, ספרות, רווחים, פיסוק בסיסי
+                                    const cleaned = raw.replace(/[^0-9\u0590-\u05FF\s"'\-.,:;()!?]/g, '');
+                                    setFormData(prev => ({ ...prev, description: cleaned }));
+                                  }}
                                 className="w-full p-2 border border-gray-300 rounded text-right"
                                 rows="4"
                                 placeholder="תיאור הספר"
