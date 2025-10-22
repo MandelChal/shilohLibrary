@@ -309,25 +309,22 @@ export const notifyUserLoanApproved = async (userId, requestData, adminNotes = '
             ? `${requestData.bookLocation.color} ${requestData.bookLocation.letter}${requestData.bookLocation.number}`
             : 'פנה לספרן לקבלת המיקום';
 
-        const message = `✅ הבקשה שלך אושרה!
+        const message = `הבקשה שלך אושרה!
 
 הספר "${requestData.bookTitle}" זמין להשאלה עד תאריך ${returnDate}.
 
-📍 מיקום הספר: ${location}
+מיקום הספר: ${location}
 
-🔑 לאיסוף הספר:
-• פנה לספרן עם תעודת זהות
-• ציין את שם הספר והמחבר
 
 ${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
 
-⏰ תקבל תזכורת יום לפני מועד ההחזרה.
+תקבל תזכורת יום לפני מועד ההחזרה.
 
-בהצלחה בלימודים! 📚`;
+בהצלחה בלימודים! `;
 
         await addNotificationSafe({
             userId,
-            title: '🎉 בקשת ההשאלה אושרה!',
+            title: 'בקשת ההשאלה אושרה!',
             message,
             type: 'success',
             relatedId: requestData.id,
@@ -336,7 +333,7 @@ ${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
             bookTitle: requestData.bookTitle
         });
 
-        console.log(`✅ הודעת אישור נשלחה למשתמש ${requestData.requesterName}`);
+        console.log(`הודעת אישור נשלחה למשתמש ${requestData.requesterName}`);
 
     } catch (error) {
         console.error('שגיאה בשליחת הודעת אישור:', error);
@@ -346,20 +343,20 @@ ${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
 // 3️⃣ הודעה למשתמש על דחיית בקשה
 export const notifyUserLoanRejected = async (userId, requestData, adminNotes = '') => {
     try {
-        const message = `❌ בקשת ההשאלה נדחתה
+        const message = `בקשת ההשאלה נדחתה
 
 הבקשה לספר "${requestData.bookTitle}" לא אושרה.
 
-${adminNotes ? `📝 סיבת הדחיה:\n${adminNotes}\n\n` : ''}הספר עשוי להיות מושאל כרגע או בתחזוקה.
+${adminNotes ? ` סיבת הדחיה:\n${adminNotes}\n\n` : ''}הספר עשוי להיות מושאל כרגע או בתחזוקה.
 
-💡 מה אפשר לעשות?
+ מה אפשר לעשות?
 • פנה לספרן לברר פרטים נוספים
 • בקש ספר חלופי בנושא דומה
 • נסה שוב במועד מאוחר יותר`;
 
         await addNotificationSafe({
             userId,
-            title: '⚠️ בקשת השאלה נדחתה',
+            title: 'בקשת השאלה נדחתה',
             message,
             type: 'error',
             relatedId: requestData.id,
@@ -368,7 +365,7 @@ ${adminNotes ? `📝 סיבת הדחיה:\n${adminNotes}\n\n` : ''}הספר עש
             bookTitle: requestData.bookTitle
         });
 
-        console.log(`✅ הודעת דחייה נשלחה למשתמש ${requestData.requesterName}`);
+        console.log(`הודעת דחייה נשלחה למשתמש ${requestData.requesterName}`);
 
     } catch (error) {
         console.error('שגיאה בשליחת הודעת דחייה:', error);
@@ -381,8 +378,8 @@ export const notifyReturnRequest = async (requestData) => {
         // הודעה למשתמש
         await addNotificationSafe({
             userId: requestData.requesterId,
-            title: '📬 בקשת החזרה התקבלה',
-            message: `בקשת ההחזרה שלך לספר "${requestData.bookTitle}" התקבלה במערכת.\n\n✅ הספרן יבדוק את הבקשה ויאשר את ההחזרה בהקדם.\n\nתקבל הודעה כאשר ההחזרה תאושר.`,
+            title: 'בקשת החזרה התקבלה',
+            message: `בקשת ההחזרה שלך לספר "${requestData.bookTitle}" התקבלה במערכת.\n\n הספרן יבדוק את הבקשה ויאשר את ההחזרה בהקדם.\n\nתקבל הודעה כאשר ההחזרה תאושר.`,
             type: 'info',
             relatedId: requestData.id,
             relatedType: 'return_request_received',
@@ -397,8 +394,8 @@ export const notifyReturnRequest = async (requestData) => {
         for (const admin of admins) {
             await addNotificationSafe({
                 userId: admin.id,
-                title: '📥 בקשת החזרת ספר',
-                message: `המשתמש ${requestData.requesterName} ביקש להחזיר ספר:\n\n📖 "${requestData.bookTitle}"\n📞 ${requestData.contactPhone}\n\n✅ יש לבדוק ולאשר את החזרת הספר במערכת.`,
+                title: 'בקשת החזרת ספר',
+                message: `המשתמש ${requestData.requesterName} ביקש להחזיר ספר:\n\n "${requestData.bookTitle}"\n ${requestData.contactPhone}\n\n יש לבדוק ולאשר את החזרת הספר במערכת.`,
                 type: 'info',
                 relatedId: requestData.id,
                 relatedType: 'return_request_admin',
@@ -407,7 +404,7 @@ export const notifyReturnRequest = async (requestData) => {
             });
         }
 
-        console.log(`✅ הודעות החזרה נשלחו למשתמש ול-${admins.length} מנהלים`);
+        console.log(` הודעות החזרה נשלחו למשתמש ול-${admins.length} מנהלים`);
 
     } catch (error) {
         console.error('שגיאה בשליחת הודעות החזרה:', error);
@@ -417,7 +414,7 @@ export const notifyReturnRequest = async (requestData) => {
 // 5️⃣ הודעה על החזרה שאושרה
 export const notifyReturnCompleted = async (userId, requestData, adminNotes = '') => {
     try {
-        const message = `✅ הספר הוחזר בהצלחה!
+        const message = ` הספר הוחזר בהצלחה!
 
 הספר "${requestData.bookTitle}" הוחזר לספרייה.
 
@@ -429,7 +426,7 @@ ${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
 
         await addNotificationSafe({
             userId,
-            title: '✨ החזרה הושלמה',
+            title: ' החזרה הושלמה',
             message,
             type: 'success',
             relatedId: requestData.id,
@@ -438,7 +435,7 @@ ${adminNotes ? `💬 הערת הספרן:\n${adminNotes}` : ''}
             bookTitle: requestData.bookTitle
         });
 
-        console.log(`✅ הודעת החזרה הושלמה נשלחה למשתמש`);
+        console.log(` הודעת החזרה הושלמה נשלחה למשתמש`);
 
     } catch (error) {
         console.error('שגיאה בשליחת הודעת החזרה:', error);
@@ -498,7 +495,7 @@ export const sendLoanStatusNotification = async (userId, requestData, newStatus,
 
 export const runDailyNotificationTasks = async () => {
     try {
-        console.log('🤖 מפעיל משימות הודעות יומיות...');
+        console.log(' מפעיל משימות הודעות יומיות...');
 
         // תזכורות החזרה
         const reminders = await checkAndSendReturnReminders();
@@ -515,8 +512,7 @@ export const runDailyNotificationTasks = async () => {
             totalCleaned += cleaned;
         }
 
-        console.log(`✅ משימות יומיות הושלמו: ${reminders} תזכורות, ${totalCleaned} הודעות נוקו`);
-
+        console.log(` משימות יומיות הושלמו: ${reminders} תזכורות, ${totalCleaned} הודעות נוקו`);
     } catch (error) {
         console.error('שגיאה במשימות יומיות:', error);
     }
@@ -1356,7 +1352,7 @@ ${adminNotes ? `הערת הספרן: ${adminNotes}` : ''}`;
             bookTitle: requestData.bookTitle,
             bookId: requestData.bookId,
             createdAt: new Date().toISOString(),
-            read: false  // ✅ שונה מ-isRead ל-read
+            read: false
         };
 
         await addNotification(notificationData);
@@ -1930,7 +1926,7 @@ export const EVENT_TYPES = {
     }
 };
 
-// פונקציה לקבלת צבע אירוע לפי סוג
+
 export const getEventColor = (eventType) => {
     const eventTypeConfig = Object.values(EVENT_TYPES).find(
         config => config.type === eventType
@@ -1938,7 +1934,6 @@ export const getEventColor = (eventType) => {
     return eventTypeConfig ? eventTypeConfig.color : 'bg-gray-100 border-gray-200 text-gray-800';
 };
 
-// פונקציה לקבלת אייקון אירוע לפי סוג
 export const getEventIcon = (eventType) => {
     const eventTypeConfig = Object.values(EVENT_TYPES).find(
         config => config.type === eventType
@@ -1946,7 +1941,6 @@ export const getEventIcon = (eventType) => {
     return eventTypeConfig ? eventTypeConfig.icon : '📅';
 };
 
-// פונקציה לבדיקת נראות אירוע למשתמש
 export const isEventVisibleToUser = (event, userId, userRole) => {
     const eventTypeConfig = Object.values(EVENT_TYPES).find(
         config => config.type === event.type
@@ -1977,12 +1971,10 @@ export const isEventVisibleToUser = (event, userId, userRole) => {
     }
 };
 
-// פונקציה לסינון אירועים לפי נראות למשתמש
 export const filterEventsByVisibility = (events, userId, userRole) => {
     return events.filter(event => isEventVisibleToUser(event, userId, userRole));
 };
 
-// פונקציה מעודכנת ליצירת אירוע עם סוג ונראות
 export const createEventWithType = async (eventData, eventType = 'personal') => {
     try {
         const eventTypeConfig = EVENT_TYPES[eventType.toUpperCase()] || EVENT_TYPES.PERSONAL;
@@ -2003,10 +1995,7 @@ export const createEventWithType = async (eventData, eventType = 'personal') => 
         throw error;
     }
 };
-// ------------------------------------------------------
-// 📅 מערכת אירועי לוח שנה עם קידוד צבעים
-// ------------------------------------------------------
-
+//create all loan events (user return event + admin tracking event + overdue alert)
 export const CALENDAR_EVENT_TYPES = {
     BOOK_LOAN: {
         type: 'book_loan',

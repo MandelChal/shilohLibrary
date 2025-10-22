@@ -1,7 +1,8 @@
-// firebase.js - תצורת Firebase
+// firebase.js - תצורת Firebase עם Storage
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 // קונפיגורציה - עם הערכים האמיתיים שלך מ-Firebase Console
 const firebaseConfig = {
@@ -27,6 +28,7 @@ try {
 // Export services
 export const db = app ? getFirestore(app) : null;
 export const auth = app ? getAuth(app) : null;
+export const storage = app ? getStorage(app) : null;
 export const isFirebaseEnabled = !!app;
 
 // Export Firebase app

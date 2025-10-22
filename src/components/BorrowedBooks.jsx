@@ -288,7 +288,7 @@ export default function BorrowedBooks({ user, onBookReturned }) {
             <div className="rounded-3xl border border-blue-200 bg-blue-50 p-6">
                 <h3 className="text-lg font-semibold text-blue-800 mb-3">הנחיות חשובות</h3>
                 <div className="text-blue-700 space-y-2 text-sm">
-                    <div>• תקופת השאלה רגילה היא 14 ימים מיום האישור</div>
+                    {/* <div>• תקופת השאלה רגילה היא 14 ימים מיום האישור</div> */}
                     <div>• ניתן לבקש החזרה מוקדמת באמצעות הכפתור "בקש החזרה"</div>
                     <div>• בעיכוב החזרה יש להקפיד על החזרה מהירה</div>
                     <div>• לשאלות או הארכת השאלה, פנה לספרן</div>
