@@ -292,6 +292,91 @@ export default function LibrarySystem() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+// הוספת גרש/גרשיים במיקום הנכון
+function addGershayim(str) {
+  if (!str) return "";
+  if (str.includes("״") || str.includes("׳")) return str;
+  if (str.length === 1) return str + "׳";
+  return str.slice(0, -1) + "״" + str.slice(-1);
+}
+
+// ממיר מספר לאותיות עבריות (כולל טיפול נכון ב-15/16 ובשנות עברית).
+// אם isYear=true – מדלגים על אלפי השנים (5786 -> "תשפ"ו").
+function toHebNumeral(n, { isYear = false } = {}) {
+  if (n == null || isNaN(n)) return "";
+
+  let num = Math.floor(n);
+  if (isYear) num = num % 1000; // בשנים מציגים רק מאות/עשרות/יחידות
+
+  const units = ["","א","ב","ג","ד","ה","ו","ז","ח","ט"];
+  const tens  = ["","י","כ","ל","מ","נ","ס","ע","פ","צ"];
+  const firstHundreds = ["","ק","ר","ש","ת"]; // 0..400
+
+  let out = "";
+
+  // מאות (כולל 500–900 כ"ת" + מאה)
+  if (num >= 100) {
+    const h = Math.floor(num / 100); // 1..9
+    if (h <= 4) {
+      out += firstHundreds[h];           // 100..400
+    } else {
+      out += "ת" + firstHundreds[h - 4]; // 500..900 -> תק/תר/תש/תת/תתק
+    }
+    num %= 100;
+  }
+
+  // עשרות+יחידות עם טיפול מיוחד ב-15/16
+  if (num === 15) {
+    out += "טו";
+  } else if (num === 16) {
+    out += "טז";
+  } else {
+    const t = Math.floor(num / 10);
+    const u = num % 10;
+    if (t > 0) out += tens[t];
+    if (u > 0) out += units[u];
+  }
+
+  return addGershayim(out);
+}
+
+// ממיר יום בחודש (1–30) לצורה עברית ("ד׳", "י״ז" וכו׳)
+function dayToHeb(day) {
+  return toHebNumeral(day);
+}
+
+// מחזיר מחרוזת עברית מלאה: "ד׳ חשוון תשפ״ו"
+function formatHebrewDateFull(date) {
+  const parts = new Intl.DateTimeFormat("he-u-ca-hebrew", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).formatToParts(date);
+
+  const dayNum   = Number(parts.find(p => p.type === "day")?.value || "1");
+  const monthHeb = parts.find(p => p.type === "month")?.value || "";
+  const yearNum  = Number(parts.find(p => p.type === "year")?.value || "5786");
+
+  const dayHeb   = dayToHeb(dayNum);                    // למשל "ד׳"
+  const yearHeb  = toHebNumeral(yearNum, { isYear: true }); // למשל "תשפ״ו"
+
+  return `${dayHeb} ${monthHeb} ${yearHeb}`;
+}
+
+function formatTimeHeb(date) {
+  const parts = new Intl.DateTimeFormat("he", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,        // כדי לקבל לפנה״צ/אחה״צ
+  }).formatToParts(date);
+
+  const hour = parts.find(p => p.type === "hour")?.value ?? "";
+  const minute = parts.find(p => p.type === "minute")?.value ?? "";
+  const dayPeriod = parts.find(p => p.type === "dayPeriod")?.value ?? ""; // "לפנה״צ"/"אחה״צ"
+
+  // סידור כמו בתמונה שלך: "אחה״צ 12:42"
+  return `${hour}:${minute} ${dayPeriod}`.trim();
+}
   return (
     <div dir="rtl" className="min-h-screen bg-stone-50 text-stone-900">
       <Navigation />
@@ -447,16 +532,18 @@ export default function LibrarySystem() {
                 </div>
               </div>
 
+              
+
               {/* לוח שנה יהודי */}
               <div className="rounded-3xl border border-stone-200 bg-white overflow-hidden mx-4 md:mx-8 shadow-lg">
                 <div className="flex items-baseline justify-between px-4 sm:px-6 py-4 border-b border-stone-200 bg-gradient-to-r from-emerald-50 to-teal-50">
                   <div>
-                    <div className="text-lg font-semibold">{monthLabelHeb}</div>
+                    <div className="text-lg font-semibold">{formatHebrewDateFull(today)}</div>
                     <div className="text-sm text-stone-500">{monthLabelGreg}</div>
                   </div>
                   <div className="text-sm text-stone-500">
-                    {fmtHebFull.format(today)}
-                    <div className="text-xs text-blue-600">{getHebrewDate(today)}</div>
+                  {formatTimeHeb(today)}
+                    {/* <div className="text-xs text-blue-600">{getHebrewDate(today)}</div> */}
                   </div>
                 </div>
 
