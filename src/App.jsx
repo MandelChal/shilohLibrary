@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { User, Settings, Calendar, LogOut, Book, BookOpen, RotateCcw } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // ייבוא כל הקומפוננטות מקבצים נפרדים
 import LoginScreen from './components/LoginScreen';
@@ -63,6 +64,7 @@ import { initialCategories } from './constants';
 // קטגוריות ספרים - fallback
 const weekdays = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 
+
 // ------------------------------------------------------
 // קומפוננטה ראשית - APP מקוצר
 // ------------------------------------------------------
@@ -80,8 +82,21 @@ export default function LibrarySystem() {
   const [newEvent, setNewEvent] = useState({ title: "", description: "", time: "" });
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState("calendar");
-
   const grid = useMemo(() => monthMatrix(cursor), [cursor]);
+
+  const navigate = useNavigate();
+const location = useLocation();
+
+// מסנכרן את currentView עם ה-URL
+useEffect(() => {
+  if (location.pathname.startsWith("/calendar")) setCurrentView("calendar");
+  else if (location.pathname.startsWith("/catalog")) setCurrentView("catalog");
+  else if (location.pathname.startsWith("/borrowed")) setCurrentView("borrowed");
+  else if (location.pathname.startsWith("/returns")) setCurrentView("returns");
+  else if (location.pathname.startsWith("/admin")) setCurrentView("admin");
+  else setCurrentView("calendar"); // ברירת מחדל
+}, [location.pathname]);
+
 
   // טעינה ראשונית של נתונים מ-Firebase
   useEffect(() => {
@@ -379,6 +394,7 @@ function formatTimeHeb(date) {
 }
   return (
     <div dir="rtl" className="min-h-screen bg-stone-50 text-stone-900">
+
       <Navigation />
 
       <SystemAnnouncements
@@ -406,7 +422,7 @@ function formatTimeHeb(date) {
             {/* תפריט ניווט */}
             <div className="flex gap-2">
               <button
-                onClick={() => setCurrentView('calendar')}
+                onClick={() => navigate('calendar')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'calendar'
                   ? 'bg-emerald-700 text-white'
                   : 'border border-stone-300 hover:bg-stone-100'
@@ -417,7 +433,7 @@ function formatTimeHeb(date) {
               </button>
 
               <button
-                onClick={() => setCurrentView('catalog')}
+                onClick={() => navigate("/catalog")}
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'catalog'
                   ? 'bg-emerald-700 text-white'
                   : 'border border-stone-300 hover:bg-stone-100'
@@ -443,7 +459,7 @@ function formatTimeHeb(date) {
               {user.role === 'admin' && (
                 <>
                   <button
-                    onClick={() => setCurrentView('returns')}
+                    onClick={() => navigate("/returns")}
                     className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'returns'
                       ? 'bg-emerald-700 text-white'
                       : 'border border-stone-300 hover:bg-stone-100'
@@ -454,7 +470,7 @@ function formatTimeHeb(date) {
                   </button>
 
                   <button
-                    onClick={() => setCurrentView('admin')}
+                    onClick={() => navigate("/admin")}
                     className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${currentView === 'admin'
                       ? 'bg-emerald-700 text-white'
                       : 'border border-stone-300 hover:bg-stone-100'
