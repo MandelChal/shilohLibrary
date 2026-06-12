@@ -16,35 +16,9 @@ export default function Navigation() {
                         <h1 className="text-xl font-semibold text-stone-800">ספריית שִׁלֹה</h1>
                     </div>
 
-                    {/* תפריט ניווט */}
-                    <div className="flex gap-8">
-                        <a
-                            href="#about"
-                            className="text-stone-700 hover:text-emerald-600 font-medium transition-colors cursor-pointer"
-                        >
-                            על הישיבה
-                        </a>
-                        <a
-                            href="#catalog"
-                            className="text-stone-700 hover:text-emerald-600 font-medium transition-colors cursor-pointer"
-                        >
-                            קטלוג ספרים
-                        </a>
-                        <a
-                            href="#contact"
-                            className="text-stone-700 hover:text-emerald-600 font-medium transition-colors cursor-pointer"
-                        >
-                            יצירת קשר
-                        </a>
-                        <a
-                            href="#hours"
-                            className="text-stone-700 hover:text-emerald-600 font-medium transition-colors cursor-pointer"
-                        >
-                            שעות פתיחה
-                        </a>
-                    </div>
                 </div>
             </div>
         </nav>
+
     );
 }

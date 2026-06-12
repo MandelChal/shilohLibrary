@@ -48,7 +48,7 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
 
             const savedAnnouncement = await addAnnouncement(announcementData);
 
-            // קריאה לפונקציה של הקומפוננט האב (לעדכון state מקומי)
+
             if (onAddAnnouncement) {
                 onAddAnnouncement(savedAnnouncement);
             }
@@ -74,15 +74,19 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
 
         setLoading(true);
         try {
+            // מחיקה מהמסד נתונים תחילה
             await deleteAnnouncement(announcementId);
 
-            // קריאה לפונקציה של הקומפוננט האב (לעדכון state מקומי)
+            // עדכון הקומפוננטה האב (App.jsx)
             if (onDeleteAnnouncement) {
                 onDeleteAnnouncement(announcementId);
             }
 
-            // אם זו ההודעה הנוכחית ויש עוד הודעות, עבור להודעה הבאה
-            if (currentIndex >= announcements.length - 1 && announcements.length > 1) {
+            // עדכון האינדקס הנוכחי אם צריך
+            const remainingAnnouncements = announcements.filter(a => a.id !== announcementId);
+            if (currentIndex >= remainingAnnouncements.length && remainingAnnouncements.length > 0) {
+                setCurrentIndex(0);
+            } else if (remainingAnnouncements.length === 0) {
                 setCurrentIndex(0);
             }
 
@@ -95,7 +99,6 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
             setLoading(false);
         }
     };
-
     const nextAnnouncement = () => {
         if (announcements.length > 1) {
             setCurrentIndex((prev) => (prev + 1) % announcements.length);

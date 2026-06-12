@@ -27,15 +27,15 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
         regularUsers: 0
     });
     const [loading, setLoading] = useState(true);
-
-    // טעינת סטטיסטיקות מ-Firebase
+    const [localAnnouncements, setLocalAnnouncements] = useState([]);
     useEffect(() => {
         loadStats();
     }, []);
 
-    // הסר את הקוד השגוי שהיה כאן (שורות 45-52 במקור)
+    useEffect(() => {
+        setLocalAnnouncements(announcements || []);
+    }, [announcements]);
 
-    // מעקב אחר שינויים בזמן אמת
     useEffect(() => {
         const unsubscribeUsers = subscribeToCollection('users', (usersData) => {
             updateStatsFromUsers(usersData);
@@ -142,7 +142,6 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
             try {
                 await deleteEventFromFirebase(eventId);
                 console.log('אירוע נמחק בהצלחה:', eventId);
-                // הסטטיסטיקות יתעדכנו אוטומטית דרך subscribeToCollection
             } catch (error) {
                 console.error('שגיאה במחיקת אירוע:', error);
                 alert('שגיאה במחיקת האירוע: ' + error.message);
@@ -155,7 +154,6 @@ export default function AdminPanel({ events, onDeleteEvent, announcements, curre
             try {
                 await deleteAnnouncementFromFirebase(announcementId);
                 console.log('הודעה נמחקה בהצלחה:', announcementId);
-                // הסטטיסטיקות יתעדכנו אוטומטית דרך subscribeToCollection
             } catch (error) {
                 console.error('שגיאה במחיקת הודעה:', error);
                 alert('שגיאה במחיקת ההודעה: ' + error.message);

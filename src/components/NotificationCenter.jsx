@@ -1,400 +1,528 @@
-// NotificationCenter.jsx - מרכז הודעות למשתמשים
-import React, { useState, useEffect } from 'react';
-import { Bell, X, CheckCircle, AlertCircle, XCircle, Info, Trash2, Eye, MarkAsRead } from 'lucide-react';
+// NotificationCenter.jsx - מרכז הודעות משופר עם ביצועים טובים יותר
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Bell, Check, X, RefreshCw, Book, MapPin, Calendar, Trash2, CheckCheck } from 'lucide-react';
+import {
+    getNotifications,
+    markNotificationAsRead,
+    deleteNotification,
+    getUnreadNotificationsCount,
+    getBooks,
+    cleanOldNotifications
+} from '../utils/dbHelpers';
 
-export default function NotificationCenter({ user, onClose }) {
+export default function NotificationCenter({ user }) {
+    const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [filter, setFilter] = useState('all'); // all, unread, success, error
+    const [books, setBooks] = useState([]);
+    const [selectedNotification, setSelectedNotification] = useState(null);
+    const [filter, setFilter] = useState('all'); // all, unread, read
 
+    // טעינת נתונים בטעינה ראשונית
     useEffect(() => {
-        loadNotifications();
-        // רענון הודעות כל 30 שניות
-        const interval = setInterval(loadNotifications, 30000);
-        return () => clearInterval(interval);
+        if (user) {
+            loadNotifications();
+            loadBooks();
+
+            // רענון אוטומטי כל דקה
+            const interval = setInterval(loadNotifications, 60000);
+
+            // ניקוי הודעות ישנות פעם ביום
+            const cleanupInterval = setInterval(() => {
+                cleanOldNotifications(user.id || user.username, 30);
+            }, 24 * 60 * 60 * 1000);
+
+            return () => {
+                clearInterval(interval);
+                clearInterval(cleanupInterval);
+            };
+        }
     }, [user]);
 
-    const loadNotifications = async () => {
+    const loadBooks = async () => {
+        try {
+            const booksData = await getBooks();
+            setBooks(booksData);
+        } catch (error) {
+            console.error('שגיאה בטעינת ספרים:', error);
+        }
+    };
+
+    const loadNotifications = useCallback(async () => {
+        if (!user) return;
+
         setLoading(true);
         try {
-            const userNotifications = await getNotifications(user.id || user.username);
-            setNotifications(userNotifications);
-            console.log('הודעות נטענו למשתמש:', userNotifications.length);
+            const [notificationsData, unreadCountData] = await Promise.all([
+                getNotifications(user.id || user.username),
+                getUnreadNotificationsCount(user.id || user.username)
+            ]);
+
+            setNotifications(notificationsData);
+            setUnreadCount(unreadCountData);
+
         } catch (error) {
             console.error('שגיאה בטעינת הודעות:', error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
-    const handleMarkAsRead = async (notificationId) => {
+    const handleMarkAsRead = useCallback(async (notificationId) => {
         try {
             await markNotificationAsRead(notificationId);
-            setNotifications(prev => prev.map(n =>
-                n.id === notificationId ? { ...n, isRead: true } : n
-            ));
+
+            setNotifications(prev =>
+                prev.map(notif =>
+                    notif.id === notificationId ? { ...notif, read: true } : notif
+                )
+            );
+            setUnreadCount(prev => Math.max(0, prev - 1));
+
         } catch (error) {
             console.error('שגיאה בסימון הודעה כנקראה:', error);
         }
-    };
+    }, []);
 
-    const handleMarkAllAsRead = async () => {
+    const handleDeleteNotification = useCallback(async (notificationId, isRead) => {
         try {
-            const unreadNotifications = notifications.filter(n => !n.isRead);
-            for (const notification of unreadNotifications) {
-                await markNotificationAsRead(notification.id);
+            await deleteNotification(notificationId);
+
+            setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+
+            if (!isRead) {
+                setUnreadCount(prev => Math.max(0, prev - 1));
             }
-            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+
+        } catch (error) {
+            console.error('שגיאה במחיקת הודעה:', error);
+        }
+    }, []);
+
+    const handleMarkAllAsRead = useCallback(async () => {
+        try {
+            const unreadNotifications = notifications.filter(n => !n.read);
+
+            await Promise.all(
+                unreadNotifications.map(notification =>
+                    markNotificationAsRead(notification.id)
+                )
+            );
+
+            setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+            setUnreadCount(0);
+
         } catch (error) {
             console.error('שגיאה בסימון כל ההודעות:', error);
         }
-    };
+    }, [notifications]);
 
-    const handleDelete = async (notificationId) => {
-        if (confirm('האם אתה בטוח שברצונך למחוק את ההודעה?')) {
-            try {
-                await deleteNotification(notificationId);
-                setNotifications(prev => prev.filter(n => n.id !== notificationId));
-            } catch (error) {
-                console.error('שגיאה במחיקת הודעה:', error);
+    const handleDeleteAllRead = useCallback(async () => {
+        try {
+            const readNotifications = notifications.filter(n => n.read);
+
+            if (readNotifications.length === 0) {
+                alert('אין הודעות קרואות למחיקה');
+                return;
             }
+
+            if (!confirm(`האם למחוק ${readNotifications.length} הודעות קרואות?`)) {
+                return;
+            }
+
+            await Promise.all(
+                readNotifications.map(notification =>
+                    deleteNotification(notification.id)
+                )
+            );
+
+            setNotifications(prev => prev.filter(n => !n.read));
+
+        } catch (error) {
+            console.error('שגיאה במחיקת הודעות קרואות:', error);
         }
-    };
+    }, [notifications]);
+
+    const toggleNotificationCenter = useCallback(() => {
+        setIsOpen(prev => !prev);
+    }, []);
+
+    const getBookDetails = useCallback((bookId) => {
+        return books.find(book => book.id === bookId);
+    }, [books]);
 
     const getNotificationIcon = (type) => {
         switch (type) {
-            case 'success': return <CheckCircle className="w-5 h-5 text-green-600" />;
-            case 'error': return <XCircle className="w-5 h-5 text-red-600" />;
-            case 'warning': return <AlertCircle className="w-5 h-5 text-yellow-600" />;
-            default: return <Info className="w-5 h-5 text-blue-600" />;
+            case 'success': return '✅';
+            case 'error': return '❌';
+            case 'warning': return '⚠️';
+            case 'info': return 'ℹ️';
+            default: return '📢';
         }
     };
 
-    const getNotificationColor = (type) => {
+    const getTypeColor = (type) => {
         switch (type) {
-            case 'success': return 'border-green-200 bg-green-50';
-            case 'error': return 'border-red-200 bg-red-50';
-            case 'warning': return 'border-yellow-200 bg-yellow-50';
-            default: return 'border-blue-200 bg-blue-50';
+            case 'success': return 'bg-green-50 border-green-200';
+            case 'error': return 'bg-red-50 border-red-200';
+            case 'warning': return 'bg-yellow-50 border-yellow-200';
+            case 'info': return 'bg-blue-50 border-blue-200';
+            default: return 'bg-gray-50 border-gray-200';
         }
     };
 
-    const filteredNotifications = notifications.filter(notification => {
-        switch (filter) {
-            case 'unread': return !notification.isRead;
-            case 'success': return notification.type === 'success';
-            case 'error': return notification.type === 'error';
-            default: return true;
-        }
-    });
+    const getTimeAgo = (dateString) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
 
-    const unreadCount = notifications.filter(n => !n.isRead).length;
+        if (diffMins < 1) return 'עכשיו';
+        if (diffMins < 60) return `לפני ${diffMins} דקות`;
+        if (diffHours < 24) return `לפני ${diffHours} שעות`;
+        return `לפני ${diffDays} ימים`;
+    };
+
+    const openNotificationDetail = (notification) => {
+        setSelectedNotification(notification);
+        if (!notification.read) {
+            handleMarkAsRead(notification.id);
+        }
+    };
+
+    // סינון הודעות לפי פילטר
+    const filteredNotifications = useMemo(() => {
+        switch (filter) {
+            case 'unread':
+                return notifications.filter(n => !n.read);
+            case 'read':
+                return notifications.filter(n => n.read);
+            default:
+                return notifications;
+        }
+    }, [notifications, filter]);
+
+    if (!user) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-                {/* כותרת */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                    <div className="flex items-center gap-3">
-                        <Bell className="w-6 h-6 text-blue-600" />
-                        <h2 className="text-xl font-semibold">ההודעות שלי</h2>
-                        {unreadCount > 0 && (
-                            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                                {unreadCount} חדשות
-                            </span>
-                        )}
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
+        <div className="relative inline-block">
+            {/* כפתור פתיחה */}
+            <button
+                onClick={toggleNotificationCenter}
+                disabled={loading}
+                className={`relative p-2 rounded-full transition-all duration-200 ${isOpen
+                    ? 'bg-blue-100 text-blue-600'
+                    : 'hover:bg-gray-100 text-gray-600'
+                    } disabled:opacity-50`}
+                title="הודעות"
+            >
+                <Bell className={`w-5 h-5 ${loading ? 'animate-pulse' : ''}`} />
+                {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center animate-pulse">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                )}
+            </button>
 
-                {/* פילטרים */}
-                <div className="p-4 border-b border-gray-200">
-                    <div className="flex gap-2 flex-wrap">
-                        <button
-                            onClick={() => setFilter('all')}
-                            className={`px-3 py-1 rounded-full text-sm transition-colors ${filter === 'all'
-                                ? 'bg-blue-600 text-white'
-                                : 'border border-gray-300 hover:bg-gray-100'
-                                }`}
-                        >
-                            הכל ({notifications.length})
-                        </button>
-                        <button
-                            onClick={() => setFilter('unread')}
-                            className={`px-3 py-1 rounded-full text-sm transition-colors ${filter === 'unread'
-                                ? 'bg-blue-600 text-white'
-                                : 'border border-gray-300 hover:bg-gray-100'
-                                }`}
-                        >
-                            לא נקראו ({unreadCount})
-                        </button>
-                        <button
-                            onClick={() => setFilter('success')}
-                            className={`px-3 py-1 rounded-full text-sm transition-colors ${filter === 'success'
-                                ? 'bg-green-600 text-white'
-                                : 'border border-gray-300 hover:bg-gray-100'
-                                }`}
-                        >
-                            אישורים
-                        </button>
-                        <button
-                            onClick={() => setFilter('error')}
-                            className={`px-3 py-1 rounded-full text-sm transition-colors ${filter === 'error'
-                                ? 'bg-red-600 text-white'
-                                : 'border border-gray-300 hover:bg-gray-100'
-                                }`}
-                        >
-                            דחיות
-                        </button>
-                    </div>
-                </div>
-
-                {/* רשימת הודעות */}
-                <div className="max-h-96 overflow-y-auto p-4">
-                    {loading ? (
-                        <div className="text-center py-8 text-gray-500">טוען הודעות...</div>
-                    ) : filteredNotifications.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            <Bell className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                            <div className="text-lg font-medium mb-2">אין הודעות</div>
-                            <div className="text-sm">
-                                {filter === 'all' ? 'אין לך הודעות כרגע' : `אין הודעות מסוג ${filter === 'unread' ? 'לא נקראות' : filter}`}
+            {/* חלון הודעות */}
+            {isOpen && (
+                <div className="absolute top-full left-0 mt-2 w-80 max-h-96 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                    {/* כותרת */}
+                    <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-semibold text-gray-800">הודעות</h3>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={loadNotifications}
+                                    disabled={loading}
+                                    className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                                    title="רענן הודעות"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                                </button>
+                                {unreadCount > 0 && (
+                                    <button
+                                        onClick={handleMarkAllAsRead}
+                                        disabled={loading}
+                                        className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+                                        title="סמן הכל כנקרא"
+                                    >
+                                        <CheckCheck className="w-4 h-4" />
+                                    </button>
+                                )}
+                                {notifications.some(n => n.read) && (
+                                    <button
+                                        onClick={handleDeleteAllRead}
+                                        disabled={loading}
+                                        className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50"
+                                        title="מחק הודעות קרואות"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                         </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {filteredNotifications.map(notification => (
+
+                        {/* פילטרים */}
+                        <div className="flex gap-2 text-sm">
+                            <button
+                                onClick={() => setFilter('all')}
+                                className={`px-3 py-1 rounded-full transition-colors ${filter === 'all'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                            >
+                                הכל ({notifications.length})
+                            </button>
+                            <button
+                                onClick={() => setFilter('unread')}
+                                className={`px-3 py-1 rounded-full transition-colors ${filter === 'unread'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                            >
+                                לא נקראו ({unreadCount})
+                            </button>
+                            <button
+                                onClick={() => setFilter('read')}
+                                className={`px-3 py-1 rounded-full transition-colors ${filter === 'read'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                            >
+                                נקראו ({notifications.length - unreadCount})
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* תוכן ההודעות */}
+                    <div className="max-h-64 overflow-y-auto">
+                        {loading && notifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">
+                                <div className="animate-pulse">טוען הודעות...</div>
+                            </div>
+                        ) : filteredNotifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">
+                                <Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                                <div className="text-lg font-medium mb-1">
+                                    {filter === 'unread' ? 'אין הודעות חדשות' :
+                                        filter === 'read' ? 'אין הודעות קרואות' :
+                                            'אין הודעות'}
+                                </div>
+                            </div>
+                        ) : (
+                            filteredNotifications.map(notification => (
                                 <div
                                     key={notification.id}
-                                    className={`relative border rounded-lg p-4 transition-all ${notification.isRead
-                                        ? 'border-gray-200 bg-gray-50'
-                                        : `${getNotificationColor(notification.type)} border-l-4`
+                                    className={`p-4 border-b border-gray-100 transition-all hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50 border-r-4 border-blue-400' : ''
                                         }`}
+                                    onClick={() => openNotificationDetail(notification)}
                                 >
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex-shrink-0 mt-0.5">
-                                            {getNotificationIcon(notification.type)}
-                                        </div>
-
+                                    <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className={`text-sm font-medium ${notification.isRead ? 'text-gray-700' : 'text-gray-900'
-                                                        }`}>
-                                                        {notification.title}
-                                                    </h3>
-                                                    <p className={`text-sm mt-1 ${notification.isRead ? 'text-gray-500' : 'text-gray-700'
-                                                        }`}>
-                                                        {notification.message}
-                                                    </p>
-                                                    <div className="text-xs text-gray-400 mt-2">
-                                                        {new Date(notification.createdAt).toLocaleDateString('he-IL')}
-                                                        {' '}
-                                                        {new Date(notification.createdAt).toLocaleTimeString('he-IL')}
-                                                    </div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-lg">{getNotificationIcon(notification.type)}</span>
+                                                <div className="font-medium text-gray-800 truncate text-sm">
+                                                    {notification.title}
                                                 </div>
+                                                {!notification.read && (
+                                                    <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                                                )}
+                                            </div>
 
-                                                <div className="flex items-center gap-1 mr-2">
-                                                    {!notification.isRead && (
-                                                        <button
-                                                            onClick={() => handleMarkAsRead(notification.id)}
-                                                            className="p-1 rounded hover:bg-gray-200 transition-colors"
-                                                            title="סמן כנקרא"
-                                                        >
-                                                            <Eye className="w-4 h-4 text-gray-500" />
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleDelete(notification.id)}
-                                                        className="p-1 rounded hover:bg-red-100 transition-colors"
-                                                        title="מחק הודעה"
-                                                    >
-                                                        <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                </div>
+                                            <div className="text-xs text-gray-600 mb-2 line-clamp-2">
+                                                {notification.message.split('\n')[0]}
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-xs text-gray-400">
+                                                <span>{getTimeAgo(notification.createdAt)}</span>
+                                                {notification.bookTitle && (
+                                                    <span className="text-blue-600 flex items-center gap-1 truncate max-w-[120px]">
+                                                        <Book className="w-3 h-3 flex-shrink-0" />
+                                                        <span className="truncate">{notification.bookTitle}</span>
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* נקודה כחולה לסימון הודעה לא נקראה */}
-                                    {!notification.isRead && (
-                                        <div className="absolute left-2 top-4 w-2 h-2 bg-blue-600 rounded-full"></div>
-                                    )}
+                                        <div className="flex flex-col gap-1 flex-shrink-0">
+                                            {!notification.read && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleMarkAsRead(notification.id);
+                                                    }}
+                                                    className="p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors"
+                                                    title="סמן כנקרא"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteNotification(notification.id, notification.read);
+                                                }}
+                                                className="p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded transition-colors"
+                                                title="מחק הודעה"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                            ))}
+                            ))
+                        )}
+                    </div>
+
+                    {/* כותרת תחתונה */}
+                    {filteredNotifications.length > 0 && (
+                        <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 text-center">
+                            <span className="text-xs text-gray-500">
+                                {filter === 'all' && `סה"כ ${notifications.length} הודעות`}
+                                {filter === 'unread' && `${unreadCount} הודעות לא נקראו`}
+                                {filter === 'read' && `${notifications.length - unreadCount} הודעות קרואות`}
+                            </span>
                         </div>
                     )}
                 </div>
+            )}
 
-                {/* פוטר */}
-                <div className="p-4 border-t border-gray-200 bg-gray-50">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                        <div>סה״כ {notifications.length} הודעות</div>
-                        <div className="flex gap-4">
-                            <button
-                                onClick={loadNotifications}
-                                disabled={loading}
-                                className="text-blue-600 hover:text-blue-800 disabled:opacity-50"
-                            >
-                                {loading ? 'מרענן...' : 'רענן'}
-                            </button>
-                            {unreadCount > 0 && (
+            {/* חלון פרטי הודעה מפורט */}
+            {selectedNotification && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                    onClick={() => setSelectedNotification(null)}
+                >
+                    <div
+                        className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className={`sticky top-0 border-b p-4 ${getTypeColor(selectedNotification.type)}`}>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">{getNotificationIcon(selectedNotification.type)}</span>
+                                    <h3 className="text-lg font-semibold text-gray-800">פרטי הודעה</h3>
+                                </div>
                                 <button
-                                    onClick={handleMarkAllAsRead}
-                                    className="text-green-600 hover:text-green-800"
+                                    onClick={() => setSelectedNotification(null)}
+                                    className="p-2 hover:bg-white/50 rounded-lg transition-colors"
                                 >
-                                    סמן הכל כנקרא
+                                    <X className="w-5 h-5" />
                                 </button>
-                            )}
+                            </div>
+                        </div>
+
+                        <div className="p-6">
+                            {/* כותרת ההודעה */}
+                            <div className="mb-4">
+                                <h4 className="text-xl font-bold text-gray-900 mb-2">
+                                    {selectedNotification.title}
+                                </h4>
+                                <div className="text-sm text-gray-500">
+                                    {new Date(selectedNotification.createdAt).toLocaleDateString('he-IL', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* פרטי הספר אם זמין */}
+                            {selectedNotification.bookId && (() => {
+                                const book = getBookDetails(selectedNotification.bookId);
+                                return book ? (
+                                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                        <h5 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                                            <Book className="w-5 h-5" />
+                                            פרטי הספר
+                                        </h5>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">שם הספר:</span>
+                                                <span className="text-left">{book.title}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">מחבר:</span>
+                                                <span className="text-left">{book.author}</span>
+                                            </div>
+                                            {book.location && (
+                                                <div className="flex justify-between">
+                                                    <span className="font-medium">מיקום:</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <MapPin className="w-3 h-3" />
+                                                        {book.location.color} {book.location.letter}{book.location.number}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">סטטוס:</span>
+                                                <span className={`px-2 py-1 rounded text-xs ${book.status === 'available' ? 'bg-green-100 text-green-700' :
+                                                    book.status === 'borrowed' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-red-100 text-red-700'
+                                                    }`}>
+                                                    {book.status === 'available' ? 'זמין' :
+                                                        book.status === 'borrowed' ? 'מושאל' : 'תחזוקה'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : selectedNotification.bookTitle ? (
+                                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                        <div className="flex items-center gap-2 text-blue-700">
+                                            <Book className="w-5 h-5" />
+                                            <span className="font-medium">{selectedNotification.bookTitle}</span>
+                                        </div>
+                                    </div>
+                                ) : null;
+                            })()}
+
+                            {/* תוכן ההודעה */}
+                            <div className="mb-6">
+                                <h5 className="font-semibold text-gray-800 mb-2">תוכן ההודעה</h5>
+                                <div className="text-gray-700 whitespace-pre-line leading-relaxed bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    {selectedNotification.message}
+                                </div>
+                            </div>
+
+                            {/* פעולות */}
+                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={() => setSelectedNotification(null)}
+                                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                                >
+                                    סגור
+                                </button>
+                                {!selectedNotification.read && (
+                                    <button
+                                        onClick={() => {
+                                            handleMarkAsRead(selectedNotification.id);
+                                            setSelectedNotification(null);
+                                        }}
+                                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                                    >
+                                        סמן כנקרא
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        handleDeleteNotification(selectedNotification.id, selectedNotification.read);
+                                        setSelectedNotification(null);
+                                    }}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                >
+                                    מחק
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }
-
-// פונקציות עזר לניהול הודעות - להוסיף ל-dbHelpers.js
-
-// קבלת הודעות למשתמש
-export const getNotifications = async (userId) => {
-    if (!isFirebaseEnabled) {
-        const saved = localStorage.getItem('libraryNotifications');
-        const allNotifications = saved ? JSON.parse(saved) : [];
-        return allNotifications.filter(n => n.userId === userId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    }
-
-    try {
-        const q = query(
-            collection(db, 'notifications'),
-            where('userId', '==', userId),
-            orderBy('createdAt', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        const notifications = [];
-        querySnapshot.forEach((doc) => {
-            notifications.push({ id: doc.id, ...doc.data() });
-        });
-        return notifications;
-    } catch (error) {
-        console.error('שגיאה בטעינת הודעות:', error);
-        const saved = localStorage.getItem('libraryNotifications');
-        const allNotifications = saved ? JSON.parse(saved) : [];
-        return allNotifications.filter(n => n.userId === userId);
-    }
-};
-
-// הוספת הודעה חדשה
-export const addNotification = async (notificationData) => {
-    if (!isFirebaseEnabled) {
-        const saved = localStorage.getItem('libraryNotifications');
-        const notifications = saved ? JSON.parse(saved) : [];
-        const newNotification = {
-            id: Date.now().toString(),
-            ...notificationData,
-            createdAt: new Date().toISOString(),
-            isRead: false
-        };
-        notifications.unshift(newNotification);
-        localStorage.setItem('libraryNotifications', JSON.stringify(notifications));
-        return newNotification;
-    }
-
-    try {
-        const docRef = await addDoc(collection(db, 'notifications'), {
-            ...notificationData,
-            createdAt: serverTimestamp(),
-            isRead: false
-        });
-        return { id: docRef.id, ...notificationData };
-    } catch (error) {
-        console.error('שגיאה בהוספת הודעה:', error);
-        throw error;
-    }
-};
-
-// סימון הודעה כנקראה
-export const markNotificationAsRead = async (notificationId) => {
-    if (!isFirebaseEnabled) {
-        const saved = localStorage.getItem('libraryNotifications');
-        const notifications = saved ? JSON.parse(saved) : [];
-        const updatedNotifications = notifications.map(n =>
-            n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
-        );
-        localStorage.setItem('libraryNotifications', JSON.stringify(updatedNotifications));
-        return;
-    }
-
-    try {
-        const notificationRef = doc(db, 'notifications', notificationId);
-        await updateDoc(notificationRef, {
-            isRead: true,
-            readAt: serverTimestamp()
-        });
-    } catch (error) {
-        console.error('שגיאה בסימון הודעה כנקראה:', error);
-        throw error;
-    }
-};
-
-// מחיקת הודעה
-export const deleteNotification = async (notificationId) => {
-    if (!isFirebaseEnabled) {
-        const saved = localStorage.getItem('libraryNotifications');
-        const notifications = saved ? JSON.parse(saved) : [];
-        const filteredNotifications = notifications.filter(n => n.id !== notificationId);
-        localStorage.setItem('libraryNotifications', JSON.stringify(filteredNotifications));
-        return;
-    }
-
-    try {
-        await deleteDoc(doc(db, 'notifications', notificationId));
-    } catch (error) {
-        console.error('שגיאה במחיקת הודעה:', error);
-        throw error;
-    }
-};
-
-// שליחת הודעה אוטומטית לעדכון בקשת השאלה
-export const sendLoanRequestNotification = async (userId, requestData, newStatus, adminNotes = '') => {
-    let title, message, type;
-
-    switch (newStatus) {
-        case 'approved':
-            title = 'בקשת השאלה אושרה! 📚';
-            message = `בקשתך לספר "${requestData.bookTitle}" אושרה. הספר מוכן לאיסוף. ${adminNotes ? `הערת האדמין: ${adminNotes}` : ''}`;
-            type = 'success';
-            break;
-        case 'rejected':
-            title = 'בקשת השאלה נדחתה';
-            message = `בקשתך לספר "${requestData.bookTitle}" נדחתה. ${adminNotes ? `סיבה: ${adminNotes}` : 'ניתן לפנות לספרן לפרטים נוספים.'}`;
-            type = 'error';
-            break;
-        case 'returned':
-            title = 'ספר הוחזר בהצלחה';
-            message = `הספר "${requestData.bookTitle}" הוחזר בהצלחה. תודה שהשתמשת בספריה! ${adminNotes ? `הערת האדמין: ${adminNotes}` : ''}`;
-            type = 'success';
-            break;
-        default:
-            return;
-    }
-
-    try {
-        await addNotification({
-            userId,
-            title,
-            message,
-            type,
-            relatedId: requestData.id || null,
-            relatedType: 'loan_request'
-        });
-        console.log(`הודעה נשלחה למשתמש ${userId} בנושא ${title}`);
-    } catch (error) {
-        console.error('שגיאה בשליחת הודעה:', error);
-    }
-};
