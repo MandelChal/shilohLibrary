@@ -424,6 +424,12 @@ export default function LibrarySystem() {
     }
   };
 
+  // טיפול בסגירת פאנל הוספת אירוע
+  const handleClosePanel = () => {
+    setPanelOpen(false);
+    setNewEvent({ title: "", description: "", time: "" });
+  };
+
   async function handleAddEvent() {
     if (!newEvent.title.trim()) return;
     setLoading(true);
@@ -850,7 +856,7 @@ export default function LibrarySystem() {
                 <div className="text-lg font-semibold">אירוע חדש</div>
                 <div className="text-sm text-stone-500">{fmtHebFull.format(selected)}</div>
               </div>
-              <button onClick={() => setPanelOpen(false)} className="rounded-xl px-3 py-1.5 border border-stone-300 text-sm hover:bg-stone-100">
+              <button onClick={handleClosePanel} className="rounded-xl px-3 py-1.5 border border-stone-300 text-sm hover:bg-stone-100">
                 סגור
               </button>
             </div>
@@ -886,7 +892,7 @@ export default function LibrarySystem() {
               </label>
             </div>
             <div className="px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-3">
-              <button onClick={() => setPanelOpen(false)} className="rounded-2xl px-4 py-2 border border-stone-300 hover:bg-stone-100">
+              <button onClick={handleClosePanel} className="rounded-2xl px-4 py-2 border border-stone-300 hover:bg-stone-100">
                 ביטול
               </button>
               <button
