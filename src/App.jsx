@@ -6,6 +6,7 @@ import LoginScreen from './components/LoginScreen';
 import Navigation from './components/Navigation';
 import SystemAnnouncements from './components/SystemAnnouncements';
 import AdminPanel from './components/AdminPanel';
+import ContactSection from './components/ContactSection';
 
 // Utils - עם תצוגה עברית בלבד
 import {
@@ -581,6 +582,9 @@ export default function LibrarySystem() {
           </div>
         )}
 
+        {/* יצירת קשר */}
+        <ContactSection />
+
         {currentView === 'admin' && user.role === 'admin' && (
           <AdminPanel
             events={events}
@@ -665,4 +669,5 @@ export default function LibrarySystem() {
       </footer>
     </div>
   );
+  
 }

@@ -181,4 +181,5 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
             </div>
         </div>
     );
+    
 }
