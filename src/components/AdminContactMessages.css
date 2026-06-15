@@ -1,0 +1,161 @@
+.admin-messages-container {
+  direction: rtl;
+  text-align: right;
+  padding: 10px;
+}
+
+.admin-messages-header {
+  margin-bottom: 25px;
+  border-bottom: 2px solid #e7e5e4;
+  padding-bottom: 12px;
+}
+
+.admin-messages-header h3 {
+  font-size: 22px;
+  color: #1c1917;
+  margin: 0 0 5px 0;
+}
+
+.admin-messages-header p {
+  color: #78716c;
+  margin: 0;
+  font-size: 14px;
+}
+
+.admin-messages-loading, .no-messages {
+  text-align: center;
+  padding: 40px;
+  color: #57534e;
+  font-size: 16px;
+  background: #f5f5f4;
+  border-radius: 12px;
+}
+
+.messages-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message-card {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e7e5e4;
+  padding: 24px;
+  position: relative;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+/* אפקט צבע שמאל לפי סטטוס */
+.message-card.new {
+  border-right: 6px solid #059669; /* ירוק אמרלד לפנייה חדשה */
+}
+
+.message-card.resolved {
+  border-right: 6px solid #d6d3d1; /* אפור פסיבי לפנייה מטופלת */
+  opacity: 0.8;
+}
+
+.card-badge {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.new .card-badge {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.resolved .card-badge {
+  background-color: #f5f5f4;
+  color: #57534e;
+}
+
+.card-field {
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #44403c;
+}
+
+.card-field strong {
+  color: #1c1917;
+  display: inline-block;
+  width: 70px;
+}
+
+.msg-email {
+  direction: ltr;
+  display: inline-block;
+}
+
+.card-body {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: #fafaf9;
+  border-radius: 12px;
+  border: 1px solid #f5f5f4;
+}
+
+.card-body strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #1c1917;
+  font-size: 14px;
+}
+
+.card-body p {
+  margin: 0;
+  color: #44403c;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.card-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  justify-content: flex-start;
+}
+
+.status-btn, .delete-msg-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s;
+}
+
+.status-btn.resolve {
+  background-color: #047857;
+  color: white;
+}
+
+.status-btn.resolve:hover {
+  background-color: #065f46;
+}
+
+.status-btn.reopen {
+  background-color: #e7e5e4;
+  color: #44403c;
+}
+
+.status-btn.reopen:hover {
+  background-color: #d6d3d1;
+}
+
+.delete-msg-btn {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.delete-msg-btn:hover {
+  background-color: #fca5a5;
+}

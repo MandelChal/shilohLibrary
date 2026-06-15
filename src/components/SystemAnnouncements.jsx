@@ -3,7 +3,7 @@ import { Bell, Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { addAnnouncement, deleteAnnouncement } from '../utils/dbHelpers';
 
 // ------------------------------------------------------
-// 🔔 קומפוננטת הודעות מערכת (מסתובבות) עם Firebase
+// 🔔 קומפוננטת הודעות מערכת (מסתובבות) עם הגנה מכפילויות
 // ------------------------------------------------------
 export default function SystemAnnouncements({ user, announcements, onAddAnnouncement, onDeleteAnnouncement }) {
     const [showAddForm, setShowAddForm] = useState(false);
@@ -11,23 +11,31 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
 
-    // החלפה אוטומטית של הודעות כל 5 שניות
+    // 🛡️ מנגנון הגנה: מסנן החוצה הודעות כפולות (לפי ID או לפי כותרת ותוכן זהים)
+    const uniqueAnnouncements = announcements.filter((announcement, index, self) =>
+        index === self.findIndex((t) => (
+            t.id === announcement.id || 
+            (t.title === announcement.title && t.message === announcement.message)
+        ))
+    );
+
+    // החלפה אוטומטית של הודעות כל 5 שניות - מבוסס על הרשימה המנוקה
     useEffect(() => {
-        if (announcements.length <= 1) return;
+        if (uniqueAnnouncements.length <= 1) return;
 
         const interval = setInterval(() => {
-            setCurrentIndex((prev) => (prev + 1) % announcements.length);
+            setCurrentIndex((prev) => (prev + 1) % uniqueAnnouncements.length);
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [announcements.length]);
+    }, [uniqueAnnouncements.length]); 
 
-    // וודא שהאינדקס הנוכחי תקין
+    // וודא שהאינדקס הנוכחי תקין תמיד
     useEffect(() => {
-        if (currentIndex >= announcements.length && announcements.length > 0) {
+        if (currentIndex >= uniqueAnnouncements.length && uniqueAnnouncements.length > 0) {
             setCurrentIndex(0);
         }
-    }, [announcements.length, currentIndex]);
+    }, [uniqueAnnouncements.length, currentIndex]);
 
     const handleAdd = async (e) => {
         e.preventDefault();
@@ -48,73 +56,50 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
 
             const savedAnnouncement = await addAnnouncement(announcementData);
 
-
             if (onAddAnnouncement) {
                 onAddAnnouncement(savedAnnouncement);
             }
 
-            // איפוס הטופס
             setNewAnnouncement({ title: "", message: "", type: "info" });
             setShowAddForm(false);
-
-            console.log('הודעה נוספה בהצלחה:', savedAnnouncement.title);
-
         } catch (error) {
             console.error('שגיאה בהוספת הודעה:', error);
-            alert('שגיאה בהוספת ההודעה: ' + error.message);
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (announcementId) => {
-        if (!confirm("האם אתה בטוח שברצונך למחוק את ההודעה?")) {
-            return;
-        }
+        if (!confirm("האם אתה בטוח שברצונך למחוק את ההודעה?")) return;
 
         setLoading(true);
         try {
-            // מחיקה מהמסד נתונים תחילה
             await deleteAnnouncement(announcementId);
-
-            // עדכון הקומפוננטה האב (App.jsx)
             if (onDeleteAnnouncement) {
                 onDeleteAnnouncement(announcementId);
             }
-
-            // עדכון האינדקס הנוכחי אם צריך
-            const remainingAnnouncements = announcements.filter(a => a.id !== announcementId);
-            if (currentIndex >= remainingAnnouncements.length && remainingAnnouncements.length > 0) {
-                setCurrentIndex(0);
-            } else if (remainingAnnouncements.length === 0) {
-                setCurrentIndex(0);
-            }
-
-            console.log('הודעה נמחקה בהצלחה:', announcementId);
-
         } catch (error) {
             console.error('שגיאה במחיקת הודעה:', error);
-            alert('שגיאה במחיקת ההודעה: ' + error.message);
         } finally {
             setLoading(false);
         }
     };
+
     const nextAnnouncement = () => {
-        if (announcements.length > 1) {
-            setCurrentIndex((prev) => (prev + 1) % announcements.length);
+        if (uniqueAnnouncements.length > 1) {
+            setCurrentIndex((prev) => (prev + 1) % uniqueAnnouncements.length);
         }
     };
 
     const prevAnnouncement = () => {
-        if (announcements.length > 1) {
-            setCurrentIndex((prev) => (prev - 1 + announcements.length) % announcements.length);
+        if (uniqueAnnouncements.length > 1) {
+            setCurrentIndex((prev) => (prev - 1 + uniqueAnnouncements.length) % uniqueAnnouncements.length);
         }
     };
 
-    // אם אין הודעות ולא מנהל, אל תציג כלום
-    if (!announcements.length && user.role !== 'admin') return null;
+    if (!uniqueAnnouncements.length && user.role !== 'admin') return null;
 
-    const currentAnnouncement = announcements[currentIndex];
+    const currentAnnouncement = uniqueAnnouncements[currentIndex];
 
     return (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
@@ -123,14 +108,12 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     <div className="flex items-center gap-3">
                         <Bell className="w-5 h-5 text-blue-600" />
                         <span className="font-medium text-blue-900">הודעות מערכת</span>
-                        {announcements.length > 1 && (
+                        {uniqueAnnouncements.length > 1 && (
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                                {currentIndex + 1} מתוך {announcements.length}
+                                {currentIndex + 1} מתוך {uniqueAnnouncements.length}
                             </span>
                         )}
-                        {loading && (
-                            <span className="text-xs text-blue-600">מעדכן...</span>
-                        )}
+                        {loading && <span className="text-xs text-blue-600">מעדכן...</span>}
                     </div>
                     {user.role === 'admin' && (
                         <button
@@ -144,7 +127,6 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     )}
                 </div>
 
-                {/* טופס הוספת הודעה */}
                 {showAddForm && (
                     <form onSubmit={handleAdd} className="mt-4 p-4 bg-white rounded-xl border border-blue-200">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -196,13 +178,13 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     </form>
                 )}
 
-                {/* הצגת הודעה אחת בכל פעם */}
-                {announcements.length > 0 && currentAnnouncement && (
+                {uniqueAnnouncements.length > 0 && currentAnnouncement && (
                     <div className="mt-3">
-                        <div className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-500 ${currentAnnouncement.type === 'warning' ? 'bg-yellow-100 border border-yellow-300' :
+                        <div className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-500 ${
+                            currentAnnouncement.type === 'warning' ? 'bg-yellow-100 border border-yellow-300' :
                             currentAnnouncement.type === 'success' ? 'bg-green-100 border border-green-300' :
-                                'bg-blue-100 border border-blue-300'
-                            }`}>
+                            'bg-blue-100 border border-blue-300'
+                        }`}>
                             <div className="flex items-center gap-3 flex-1">
                                 <div className="flex-1">
                                     <div className="flex items-baseline gap-2">
@@ -212,7 +194,9 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                                         )}
                                         {currentAnnouncement.createdAt && (
                                             <span className="text-xs opacity-75">
-                                                • {new Date(currentAnnouncement.createdAt).toLocaleDateString('he-IL')}
+                                               {currentAnnouncement.createdAt?.seconds 
+                                                ? new Date(currentAnnouncement.createdAt.seconds * 1000).toLocaleDateString('he-IL') 
+                                                : new Date(currentAnnouncement.createdAt).toLocaleDateString('he-IL')}
                                             </span>
                                         )}
                                     </div>
@@ -225,52 +209,33 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                             </div>
 
                             <div className="flex items-center gap-2">
-                                {/* כפתורי ניווט אם יש יותר מהודעה אחת */}
-                                {announcements.length > 1 && (
+                                {uniqueAnnouncements.length > 1 && (
                                     <div className="flex gap-1">
-                                        <button
-                                            onClick={prevAnnouncement}
-                                            disabled={loading}
-                                            className="p-1.5 rounded-lg hover:bg-white/50 transition-colors disabled:opacity-50"
-                                            title="הודעה קודמת"
-                                        >
+                                        <button onClick={prevAnnouncement} disabled={loading} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                                             <ChevronRight className="w-4 h-4" />
                                         </button>
-                                        <button
-                                            onClick={nextAnnouncement}
-                                            disabled={loading}
-                                            className="p-1.5 rounded-lg hover:bg-white/50 transition-colors disabled:opacity-50"
-                                            title="הודעה הבאה"
-                                        >
+                                        <button onClick={nextAnnouncement} disabled={loading} className="p-1.5 rounded-lg hover:bg-white/50 transition-colors">
                                             <ChevronLeft className="w-4 h-4" />
                                         </button>
                                     </div>
                                 )}
 
-                                {/* כפתור מחיקה למנהל */}
                                 {user.role === 'admin' && (
-                                    <button
-                                        onClick={() => handleDelete(currentAnnouncement.id)}
-                                        disabled={loading}
-                                        className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-white/50 transition-colors disabled:opacity-50"
-                                        title="מחק הודעה"
-                                    >
+                                    <button onClick={() => handleDelete(currentAnnouncement.id)} disabled={loading} className="p-1.5 rounded-lg text-red-600 hover:text-red-800 hover:bg-white/50 transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 )}
                             </div>
                         </div>
 
-                        {/* נקודות אינדיקטור */}
-                        {announcements.length > 1 && (
+                        {uniqueAnnouncements.length > 1 && (
                             <div className="flex justify-center gap-1 mt-2">
-                                {announcements.map((_, index) => (
+                                {uniqueAnnouncements.map((_, index) => (
                                     <button
                                         key={index}
                                         onClick={() => setCurrentIndex(index)}
                                         disabled={loading}
-                                        className={`w-2 h-2 rounded-full transition-colors disabled:opacity-50 ${index === currentIndex ? 'bg-blue-600' : 'bg-blue-300'
-                                            }`}
+                                        className={`w-2 h-2 rounded-full transition-colors ${index === currentIndex ? 'bg-blue-600' : 'bg-blue-300'}`}
                                     />
                                 ))}
                             </div>
@@ -278,8 +243,7 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     </div>
                 )}
 
-                {/* הודעה אם אין הודעות */}
-                {announcements.length === 0 && user.role === 'admin' && (
+                {uniqueAnnouncements.length === 0 && user.role === 'admin' && (
                     <div className="mt-3 text-center py-4 text-blue-600 text-sm">
                         אין הודעות במערכת. הוסף הודעה ראשונה כדי להתחיל.
                     </div>
