@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Bell, Plus, Trash2, ChevronRight, ChevronLeft, X } from 'lucide-react'; // הוספתי את האייקון X
 import { addAnnouncement, deleteAnnouncement } from '../utils/dbHelpers';
 
 // ------------------------------------------------------
@@ -29,6 +29,12 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
         }
     }, [announcements.length, currentIndex]);
 
+    // פונקציה ייעודית לסגירת החלונית ואיפוס מוחלט של השדות
+    const handleCloseForm = () => {
+        setNewAnnouncement({ title: "", message: "", type: "info" });
+        setShowAddForm(false);
+    };
+
     const handleAdd = async (e) => {
         e.preventDefault();
         if (!newAnnouncement.title.trim()) {
@@ -48,14 +54,12 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
 
             const savedAnnouncement = await addAnnouncement(announcementData);
 
+            // if (onAddAnnouncement) {
+            //     onAddAnnouncement(savedAnnouncement);
+            // }
 
-            if (onAddAnnouncement) {
-                onAddAnnouncement(savedAnnouncement);
-            }
-
-            // איפוס הטופס
-            setNewAnnouncement({ title: "", message: "", type: "info" });
-            setShowAddForm(false);
+            // איפוס וסגירה באמצעות הפונקציה החדשה
+            handleCloseForm();
 
             console.log('הודעה נוספה בהצלחה:', savedAnnouncement.title);
 
@@ -99,6 +103,7 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
             setLoading(false);
         }
     };
+
     const nextAnnouncement = () => {
         if (announcements.length > 1) {
             setCurrentIndex((prev) => (prev + 1) % announcements.length);
@@ -134,7 +139,7 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     </div>
                     {user.role === 'admin' && (
                         <button
-                            onClick={() => setShowAddForm(!showAddForm)}
+                            onClick={() => setShowAddForm(true)}
                             disabled={loading}
                             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm transition-colors disabled:opacity-50"
                         >
@@ -144,59 +149,100 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                     )}
                 </div>
 
-                {/* טופס הוספת הודעה */}
                 {showAddForm && (
-                    <form onSubmit={handleAdd} className="mt-4 p-4 bg-white rounded-xl border border-blue-200">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <input
-                                type="text"
-                                value={newAnnouncement.title}
-                                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
-                                placeholder="כותרת הודעה *"
-                                className="rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                required
-                                disabled={loading}
-                            />
-                            <input
-                                type="text"
-                                value={newAnnouncement.message}
-                                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, message: e.target.value }))}
-                                placeholder="תוכן ההודעה"
-                                className="rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={loading}
-                            />
-                            <select
-                                value={newAnnouncement.type}
-                                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, type: e.target.value }))}
-                                className="rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={loading}
-                            >
-                                <option value="info">מידע</option>
-                                <option value="warning">אזהרה</option>
-                                <option value="success">הודעה חיובית</option>
-                            </select>
-                            <div className="flex gap-2">
-                                <button
-                                    type="submit"
-                                    disabled={loading || !newAnnouncement.title.trim()}
-                                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? 'מפרסם...' : 'פרסם'}
-                                </button>
-                                <button
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        {/* רקע כהה ומטושטש  */}
+                        <div 
+                            className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+                            onClick={handleCloseForm}
+                        ></div>
+
+                        {/* קופסת החלונית בגודל max-w-md */}
+                        <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden animate-in fade-in zoom-in duration-200 text-right">
+                            
+                            {/* כותרת החלונית עם כפתור X */}
+                            <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                                <h3 className="text-xl font-bold text-stone-800">הוספת הודעת מערכת</h3>
+                                <button 
                                     type="button"
-                                    onClick={() => setShowAddForm(false)}
-                                    disabled={loading}
-                                    className="px-3 py-2 border border-stone-300 rounded-lg hover:bg-stone-50 disabled:opacity-50"
+                                    onClick={handleCloseForm}
+                                    className="p-2 hover:bg-stone-200 rounded-full transition-colors"
                                 >
-                                    ביטול
+                                    <X className="w-5 h-5 text-stone-500" />
                                 </button>
                             </div>
+
+                            {/* שדות הטופס מסודרים מלמעלה למטה */}
+                            <form onSubmit={handleAdd} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-1">
+                                        כותרת הודעה *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newAnnouncement.title}
+                                        onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
+                                        placeholder="הקלד כותרת"
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        required
+                                        disabled={loading}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-1">
+                                        תוכן ההודעה
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        value={newAnnouncement.message}
+                                        onChange={(e) => setNewAnnouncement(prev => ({ ...prev, message: e.target.value }))}
+                                        placeholder="פרטי ההודעה..."
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        disabled={loading}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-1">
+                                        סוג הודעה
+                                    </label>
+                                    <select
+                                        value={newAnnouncement.type}
+                                        onChange={(e) => setNewAnnouncement(prev => ({ ...prev, type: e.target.value }))}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        disabled={loading}
+                                    >
+                                        <option value="info">מידע (כחול)</option>
+                                        <option value="warning">אזהרה (צהוב)</option>
+                                        <option value="success">הודעה חיובית (ירוק)</option>
+                                    </select>
+                                </div>
+
+                                {/* כפתורי פעולה בתחתית */}
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        disabled={loading || !newAnnouncement.title.trim()}
+                                        className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loading ? 'מפרסם...' : 'פרסם הודעה'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleCloseForm}
+                                        disabled={loading}
+                                        className="px-4 py-2.5 border border-stone-300 text-stone-600 rounded-xl hover:bg-stone-50 transition-colors"
+                                    >
+                                        ביטול
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                    </form>
+                    </div>
                 )}
 
-                {/* הצגת הודעה אחת בכל פעם */}
+                {/* הצגת הודעה אחת בכל פעם  */}
                 {announcements.length > 0 && currentAnnouncement && (
                     <div className="mt-3">
                         <div className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-500 ${currentAnnouncement.type === 'warning' ? 'bg-yellow-100 border border-yellow-300' :
@@ -247,7 +293,7 @@ export default function SystemAnnouncements({ user, announcements, onAddAnnounce
                                     </div>
                                 )}
 
-                                {/* כפתור מחיקה למנהל */}
+                               {/* כפתור מחיקה למנהל */}
                                 {user.role === 'admin' && (
                                     <button
                                         onClick={() => handleDelete(currentAnnouncement.id)}
