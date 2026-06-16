@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Trash2, Edit2, Eye, EyeOff, Shield, User } from 'lucide-react';
+import { Users, Plus, Trash2, Edit2, Eye, EyeOff, Shield, User, X } from 'lucide-react';
 import {
     getUsers,
     addUser as addUserToFirebase,
@@ -16,6 +16,7 @@ export default function UserManagement({ currentUser }) {
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [newUser, setNewUser] = useState({
         username: '',
         password: '',
@@ -49,8 +50,17 @@ export default function UserManagement({ currentUser }) {
         e.preventDefault();
 
         if (!newUser.username.trim() || !newUser.password.trim() || !newUser.name.trim()) {
-            alert('יש למלא את כל השדות החובה (שם משתמש, סיסמה, שם מלא)');
+            alert('יש למלא את כל השדות החובה');
             return;
+        }
+
+        // בדיקת תקינות אימייל 
+        if (newUser.email.trim()) {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(newUser.email.trim())) {
+                alert('כתובת האימייל שהוקלדה אינה תקינה. נא להזין כתובת מייל אמיתית (לדוגמה: name@domain.com)');
+                return; // עוצר את השליחה
+            }
         }
 
         setLoading(true);
@@ -70,7 +80,8 @@ export default function UserManagement({ currentUser }) {
                 email: newUser.email.trim(),
                 phone: newUser.phone.trim(),
                 createdBy: currentUser.name,
-                isActive: true
+                isActive: true,
+                createdAt: new Date().toISOString()
             };
 
             const savedUser = await addUserToFirebase(userToAdd);
@@ -90,6 +101,23 @@ export default function UserManagement({ currentUser }) {
         }
     };
 
+    // פונקציה ייעודית לסגירת המודאל ואיפוס כל השדות למצבם המקורי
+    const handleCloseAddForm = () => {
+        setShowAddForm(false);
+        // איפוס שדות הטקסט
+        setNewUser({
+            username: '',
+            password: '',
+            name: '',
+            role: 'user',
+            email: '',
+            phone: ''
+        });
+        // איפוס מצב הראות של הסיסמה (אם השתמשת בסטייט showPassword)
+        if (typeof setShowPassword === 'function') {
+            setShowPassword(false);
+        }
+    };
     // עריכת משתמש
     const handleEditUser = (user) => {
         setEditingUser({ ...user });
@@ -214,7 +242,7 @@ export default function UserManagement({ currentUser }) {
                         {loading && <div className="text-sm text-blue-600">טוען...</div>}
                     </div>
                     <button
-                        onClick={() => setShowAddForm(!showAddForm)}
+                        onClick={() => setShowAddForm(true)}
                         disabled={loading}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
@@ -250,113 +278,146 @@ export default function UserManagement({ currentUser }) {
                 </div>
             </div>
 
-            {/* טופס הוספת משתמש */}
+            {/*  חלונית מודאל להוספת משתמש */}
             {showAddForm && (
-                <div className="rounded-3xl border border-stone-200 bg-white p-6">
-                    <h3 className="text-lg font-semibold mb-4">הוספת משתמש חדש</h3>
-                    <form onSubmit={handleAddUser} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    שם משתמש * (באנגלית)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newUser.username}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="שם משתמש ייחודי (באנגלית)"
-                                    required
-                                    disabled={loading}
-                                />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    {/* רקע כהה שסוגר את החלונית בלחיצה עליו */}
+                    <div 
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+                        onClick={handleCloseAddForm}
+                    ></div>
+
+                    {/* החלונית עצמה */}
+                    <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+                        {/* כותרת החלונית */}
+                        <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+                            <h3 className="text-xl font-bold text-stone-800">הוספת משתמש חדש</h3>
+                            <button 
+                                onClick={handleCloseAddForm}
+                                className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5 text-stone-500" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddUser} className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        שם משתמש * (באנגלית)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newUser.username}
+                                        // הגבלה לאנגלית בלבד 
+                                        onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value.replace(/[^a-zA-Z]/g, '') }))}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        placeholder="username"
+                                        required
+                                        dir="ltr"
+                                    />
+                                </div>
+                                {/* סיסמה עם כפתור עין */}
+                                <div className="relative">
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        סיסמה *
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            // הטיפוס משתנה דינמית בין password ל-text בהתאם לסטייט
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={newUser.password}
+                                            onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))}
+                                            className="w-full rounded-xl border border-stone-300 pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50 text-right"
+                                            placeholder="סיסמה חזקה"
+                                            required
+                                        />
+                                        {/* כפתור העין שממוקם בצד שמאל של תיבת הקלט */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-stone-400 hover:text-stone-600 transition-colors p-1"
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff className="w-5 h-5" />
+                                            ) : (
+                                                <Eye className="w-5 h-5" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        שם מלא *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newUser.name}
+                                        onChange={(e) => setNewUser(prev => ({ ...prev, name: e.target.value.replace(/[^א-ת\s]/g, '') }))}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        placeholder="שם מלא של המשתמש"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        תפקיד *
+                                    </label>
+                                    <select
+                                        value={newUser.role}
+                                        onChange={(e) => setNewUser(prev => ({ ...prev, role: e.target.value }))}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                    >
+                                        <option value="user">משתמש רגיל</option>
+                                        <option value="admin">מנהל מערכת</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        טלפון
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        value={newUser.phone}
+                                        onChange={(e) => setNewUser(prev => ({ ...prev, phone: e.target.value.replace(/[^\d]/g, '') }))}
+                                        maxLength={10}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        placeholder="05X-XXXXXXX"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-stone-700 mb-2">
+                                        אימייל
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={newUser.email}
+                                        onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
+                                        className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-stone-50/50"
+                                        placeholder="email@example.com"
+                                        dir="ltr"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    סיסמה *
-                                </label>
-                                <input
-                                    type="password"
-                                    value={newUser.password}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="סיסמה חזקה"
-                                    required
+
+                            <div className="flex gap-3 mt-8">
+                                <button
+                                    type="submit"
                                     disabled={loading}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    שם מלא *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newUser.name}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, name: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="שם מלא של המשתמש"
-                                    required
-                                    disabled={loading}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    תפקיד *
-                                </label>
-                                <select
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, role: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    disabled={loading}
+                                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <option value="user">משתמש רגיל</option>
-                                    <option value="admin">מנהל</option>
-                                </select>
+                                    {loading ? 'יוצר משתמש...' : 'צור משתמש חדש'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCloseAddForm}
+                                    className="px-6 py-3 border border-stone-300 text-stone-600 rounded-xl hover:bg-stone-50 transition-colors"
+                                >
+                                    ביטול
+                                </button>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    אימייל
-                                </label>
-                                <input
-                                    type="email"
-                                    value={newUser.email}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="כתובת אימייל"
-                                    disabled={loading}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-stone-700 mb-2">
-                                    טלפון
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={newUser.phone}
-                                    onChange={(e) => setNewUser(prev => ({ ...prev, phone: e.target.value }))}
-                                    className="w-full rounded-xl border border-stone-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="מספר טלפון"
-                                    disabled={loading}
-                                />
-                            </div>
-                        </div>
-                        <div className="flex gap-3 pt-4">
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
-                            >
-                                {loading ? 'מוסיף...' : 'הוסף משתמש'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setShowAddForm(false)}
-                                disabled={loading}
-                                className="px-6 py-3 border border-stone-300 text-stone-700 rounded-xl hover:bg-stone-50 transition-colors disabled:opacity-50"
-                            >
-                                ביטול
-                            </button>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             )}
 
