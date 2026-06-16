@@ -480,12 +480,12 @@ export default function LibrarySystem() {
 
   const handleDeleteAnnouncement = async (announcementId) => {
     try {
-      setAnnouncements(prev => {
-        const filtered = prev.filter(announcement => announcement.id !== announcementId);
-        return filtered;
-      });
+      // קורא ישירות ל-Firebase למחוק את ההודעה
+      await deleteAnnouncement(announcementId); 
+      // אין צורך ב-setAnnouncements ידני, המאזין המובנה ב-App.jsx יעלים אותה מהמסך אוטומטית!
     } catch (error) {
-      console.error('שגיאה בעדכון state של הודעות:', error);
+      console.error('שגיאה במחיקת הודעה מ-Firebase:', error);
+      alert('שגיאה במחיקת ההודעה: ' + error.message);
     }
   };
 
@@ -849,60 +849,91 @@ export default function LibrarySystem() {
 
       {/* פאנל הוספת אירוע */}
       {panelOpen && user.role === 'admin' && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white shadow-xl border border-stone-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* רקע כהה ומטושטש (מדויק כמו במודאל משתמשים) שסוגר את החלונית בלחיצה עליו */}
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+            onClick={handleClosePanel}
+          ></div>
+
+          {/* החלונית עצמה - שונתה ל-max-w-md עם האנימציה התואמת */}
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+            
+            {/* כותרת החלונית */}
+            <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
               <div>
-                <div className="text-lg font-semibold">אירוע חדש</div>
-                <div className="text-sm text-stone-500">{fmtHebFull.format(selected)}</div>
+                <div className="text-xl font-bold text-stone-800">אירוע חדש</div>
+                <div className="text-xs text-stone-500 mt-0.5">{fmtHebFull.format(selected)}</div>
               </div>
-              <button onClick={handleClosePanel} className="rounded-xl px-3 py-1.5 border border-stone-300 text-sm hover:bg-stone-100">
-                סגור
+              <button 
+                type="button"
+                onClick={handleClosePanel} 
+                className="p-2 hover:bg-stone-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-stone-500" />
               </button>
             </div>
-            <div className="p-5 space-y-3">
-              <label className="block text-sm">
-                כותרת
+
+            {/* גוף הטופס */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  כותרת
+                </label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full rounded-xl border border-stone-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-stone-50/50"
                   value={newEvent.title}
                   onChange={(e) => setNewEvent((s) => ({ ...s, title: e.target.value }))}
                   placeholder="שם האירוע (למשל: השקת ספר)"
                 />
-              </label>
-              <label className="block text-sm">
-                שעה (אופציונלי)
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  שעה (אופציונלי)
+                </label>
                 <div className="mt-1">
                   <IOSTimePicker
-                  value={newEvent.time}
-                  onChange={(time) => setNewEvent((s) => ({ ...s, time }))}
-                  placeholder="בחר שעה"
-                />
+                    value={newEvent.time}
+                    onChange={(time) => setNewEvent((s) => ({ ...s, time }))}
+                    placeholder="בחר שעה"
+                  />
                 </div>
-              </label>
-              <label className="block text-sm">
-                תיאור
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1">
+                  תיאור
+                </label>
                 <textarea
                   rows={4}
-                  className="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full rounded-xl border border-stone-300 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-stone-50/50"
                   value={newEvent.description}
                   onChange={(e) => setNewEvent((s) => ({ ...s, description: e.target.value }))}
-                  placeholder={"פרטים נוספים, כתובת, קישור להרשמה וכו'"}
+                  placeholder="פרטים נוספים, כתובת, קישור להרשמה וכו'"
                 />
-              </label>
+              </div>
             </div>
-            <div className="px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-3">
-              <button onClick={handleClosePanel} className="rounded-2xl px-4 py-2 border border-stone-300 hover:bg-stone-100">
+
+            {/* כפתורי פעולה בתחתית */}
+            <div className="px-6 py-4 border-t border-stone-100 flex items-center justify-end gap-3 bg-stone-50/30">
+              <button 
+                type="button"
+                onClick={handleClosePanel} 
+                className="px-4 py-2.5 border border-stone-300 text-stone-600 rounded-xl hover:bg-stone-50 transition-colors"
+              >
                 ביטול
               </button>
               <button
+                type="button"
                 onClick={handleAddEvent}
                 disabled={loading || !newEvent.title.trim()}
-                className="rounded-2xl px-4 py-2 bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50"
+                className="px-5 py-2.5 bg-emerald-700 text-white rounded-xl font-bold hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "שומר..." : 'שמור אירוע'}
               </button>
             </div>
+
           </div>
         </div>
       )}
