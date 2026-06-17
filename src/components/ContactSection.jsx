@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { db } from '../utils/firebase';
-import { ref, push } from 'firebase/database';
+import { db } from '../utils/firebase'; 
+import { collection, addDoc } from 'firebase/firestore';
 import './ContactSection.css';
 
 export default function ContactSection() {
@@ -24,8 +24,7 @@ export default function ContactSection() {
     setSubmitStatus(null);
 
     try {
-      const messagesRef = ref(db, 'contact_messages');
-      await push(messagesRef, {
+      await addDoc(collection(db, 'contact_messages'), {
         name: formData.name,
         email: formData.email,
         message: formData.message,
@@ -47,36 +46,46 @@ export default function ContactSection() {
     <section className="contact-section">
       <div className="contact-container">
         
-        {/* עמודה 1: פרטי הספרייה */}
+        {/* עמודה 1: פרטי ישיבת וספריית שילה */}
         <div className="contact-info-card">
           <div className="info-header">
             <h2>ספריית שילה</h2>
-            <p>אנחנו כאן בשבילך לכל שאלה, בקשה להארכת ספר או בירור מנוי.</p>
+            <p>לכל שאלה, הארכת ספר או בירור מנוי – אתם מוזמנים ליצור איתנו קשר ישיר.</p>
           </div>
           
           <div className="info-details">
             <div className="info-item">
-              <span className="info-icon">📍</span>
-              <div>
-                <h3>כתובת</h3>
-                <p>מרכז תורני שילה</p>
-              </div>
-            </div>
-
-            <div className="info-item">
               <span className="info-icon">📞</span>
               <div>
-                <h3>טלפון</h3>
-                <p>02-XXXXXXX</p>
+                <h3>משרד הישיבה</h3>
+                <p className="phone-link">02-9942130</p>
               </div>
             </div>
 
             <div className="info-item">
-              <span className="info-icon">⏰</span>
+              <span className="info-icon">✉️</span>
               <div>
-                <h3>שעות פתיחה</h3>
-                <p>ימים א' - ה': 09:00 - 18:00</p>
-                <p>יום ו' וערבי חג: סגור</p>
+                <h3>כתובת אימייל</h3>
+                <a href="mailto:Office@yshilo.co.il" className="info-email-link">Office@yshilo.co.il</a>
+              </div>
+            </div>
+
+            <div className="info-divider"></div>
+
+            <div className="info-item">
+              <span className="info-icon">👤</span>
+              <div>
+                <h3>אחראי שבו"שים</h3>
+                <p>מאור: 052-2800521</p>
+                <p>איתמר: 054-8648850</p>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-icon">💼</span>
+              <div>
+                <h3>מנהל הישיבה</h3>
+                <p>052-5758155</p>
               </div>
             </div>
           </div>
@@ -85,7 +94,7 @@ export default function ContactSection() {
         {/* עמודה 2: טופס השארת פרטים */}
         <div className="contact-form-card">
           <div className="form-header">
-            <h2>השארת הודעה</h2>
+            <h2>השארת פנייה</h2>
             <p>מלאו את הפרטים ונחזור אליכם בהקדם האפשרי</p>
           </div>
 

@@ -174,3 +174,23 @@
   color: #991b1b;
   border: 1px solid #fecaca;
 }
+/* תוסיפי את זה בתחתית קובץ ה-ContactSection.css */
+.info-email-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.info-email-link:hover {
+  text-decoration: underline;
+}
+
+.info-divider {
+  border-top: 1px solid #e7e3da;
+  margin: 0.5rem 0;
+}
+
+.phone-link {
+  direction: ltr;
+  text-align: right;
+}

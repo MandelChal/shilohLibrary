@@ -1,152 +1,94 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../utils/firebase';
-import { ref, onValue, update, remove } from 'firebase/database';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, query, orderBy } from 'firebase/firestore'; // שינוי ל-Firestore
 import './AdminContactMessages.css';
-
-// 🌟 נתוני דמה שיופיעו רק כשה-Firebase ריק או לא נגיש במחשב שלך
-const fallbackMessages = [
-  {
-    id: "dummy1",
-    name: "אלעד כהן",
-    email: "elad@gmail.com",
-    message: "שלום, אשמח לדעת האם הספר 'חומש רש\"י' פנוי להשאלה מחר בבוקר?",
-    createdAt: new Date().toISOString(),
-    status: "new"
-  },
-  {
-    id: "dummy2",
-    name: "מיכל אברהם",
-    email: "michal@outlook.com",
-    message: "היי, יש לי שאלה לגבי שעות הפתיחה של הספרייה בערבי חגים. תודה!",
-    createdAt: new Date().toISOString(),
-    status: "resolved"
-  }
-];
 
 export default function AdminContactMessages() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // הגנה: אם ה-Database לא זמין או לא קיים, נציג ישר נתוני דמה
-    if (!db) {
-      setMessages(fallbackMessages);
-      setLoading(false);
-      return;
-    }
-
-    const messagesRef = ref(db, 'contact_messages');
+    // משיכת ההודעות מ-Firestore ומיונם לפי זמן
+    const q = query(collection(db, 'contact_messages'), orderBy('createdAt', 'desc'));
     
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const mrtList = Object.entries(data).map(([id, value]) => ({
-          id,
-          ...value
-        }));
-        mrtList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setMessages(mrtList);
-      } else {
-        // 🌟 אם התיקייה ב-Firebase ריקה (המצב אצלך), נטען את נתוני הדמה כדי שתוכלי לראות את העיצוב
-        setMessages(fallbackMessages);
-      }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messagesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMessages(messagesData);
       setLoading(false);
     }, (error) => {
-      console.error("Firebase read error, using fallback:", error);
-      setMessages(fallbackMessages);
+      console.error("Error fetching messages:", error);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const toggleStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === 'resolved' ? 'new' : 'resolved';
-    
-    // אם מדובר בנתוני דמה, נעדכן רק מקומית ב-State
-    if (id.startsWith('dummy')) {
-      setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, status: newStatus } : msg));
-      return;
-    }
-
+  const handleToggleStatus = async (id, currentStatus) => {
     try {
-      const messageRef = ref(db, `contact_messages/${id}`);
-      await update(messageRef, { status: newStatus });
+      const messageRef = doc(db, 'contact_messages', id);
+      const newStatus = currentStatus === 'treated' ? 'new' : 'treated';
+      await updateDoc(messageRef, { status: newStatus });
     } catch (error) {
       console.error("Error updating status:", error);
     }
   };
 
-  const deleteMessage = async (id) => {
-    if (!window.confirm("האם את בטוחה שברצונך למחוק את הפנייה הזו?")) return;
-
-    // אם מדובר בנתוני דמה, נמחק רק מקומית מה-State
-    if (id.startsWith('dummy')) {
-      setMessages(prev => prev.filter(msg => msg.id !== id));
-      return;
-    }
-
-    try {
-      const messageRef = ref(db, `contact_messages/${id}`);
-      await remove(messageRef);
-    } catch (error) {
-      console.error("Error deleting message:", error);
+  const handleDeleteMessage = async (id) => {
+    if (window.confirm('האם אתה בטוח שברצונך למחוק פנייה זו?')) {
+      try {
+        await deleteDoc(doc(db, 'contact_messages', id));
+      } catch (error) {
+        console.error("Error deleting message:", error);
+      }
     }
   };
 
-  if (loading) return <div className="admin-messages-loading">טוען פניות...</div>;
+  if (loading) return <div className="admin-loading">טוען פניות משתמשים...</div>;
 
   return (
     <div className="admin-messages-container">
       <div className="admin-messages-header">
-        <h3 className="text-xl font-semibold text-stone-900">פניות ותמיכת משתמשים</h3>
-        <p className="text-sm text-stone-500 mt-1">סה"כ פניות במערכת: {messages.length}</p>
+        <h2>ניהול פניות משתמשים ({messages.length})</h2>
+        <p>כאן ניתן לעקוב אחר הודעות שנשלחו מהאתר, לסמן כטופל או למחוק.</p>
       </div>
 
       {messages.length === 0 ? (
-        <div className="no-messages">אין פניות חדשות בתיבה המרכזית.</div>
+        <div className="no-messages">אין פניות משתמשים במערכת.</div>
       ) : (
-        <div className="messages-grid mt-4">
+        <div className="messages-grid">
           {messages.map((msg) => (
-            <div 
-              key={msg.id} 
-              className={`message-card ${msg.status === 'resolved' ? 'resolved' : 'new'}`}
-            >
-              <div className="card-badge">
-                {msg.status === 'resolved' ? 'טופל' : 'פנייה חדשה'}
+            <div key={msg.id} className={`message-card ${msg.status === 'treated' ? 'status-treated' : 'status-new'}`}>
+              <div className="message-badge">
+                {msg.status === 'treated' ? '✅ טופל' : '🔔 חדש'}
               </div>
               
-              <div className="card-field">
-                <strong>שם:</strong> <span>{msg.name}</span>
-              </div>
-              
-              <div className="card-field">
-                <strong>אימייל:</strong> <span className="msg-email">{msg.email}</span>
-              </div>
-              
-              <div className="card-field">
-                <strong>תאריך:</strong> <span>{new Date(msg.createdAt).toLocaleString('he-IL')}</span>
+              <div className="message-info">
+                <h3>{msg.name}</h3>
+                <a href={`mailto:${msg.email}`} className="message-email">{msg.email}</a>
+                <span className="message-date">
+                  {msg.createdAt ? new Date(msg.createdAt).toLocaleString('he-IL') : ''}
+                </span>
               </div>
 
-              <div className="card-body">
-                <strong>תוכן הפנייה:</strong>
+              <div className="message-body">
                 <p>{msg.message}</p>
               </div>
 
-              <div className="card-actions">
+              <div className="message-actions">
                 <button 
-                  onClick={() => toggleStatus(msg.id, msg.status)}
-                  className={`status-btn ${msg.status === 'resolved' ? 'reopen' : 'resolve'}`}
+                  onClick={() => handleToggleStatus(msg.id, msg.status)}
+                  className={`btn-action btn-status ${msg.status === 'treated' ? 'btn-untreat' : 'btn-treat'}`}
                 >
-                  {msg.status === 'resolved' ? 'פתח מחדש' : 'סמן כטופל'}
+                  {msg.status === 'treated' ? 'סמן כלא טופל' : 'סמן כטופל'}
                 </button>
-                
                 <button 
-                  onClick={() => deleteMessage(msg.id)}
-                  className="delete-msg-btn"
-                  title="מחק פנייה"
+                  onClick={() => handleDeleteMessage(msg.id)}
+                  className="btn-action btn-delete"
                 >
-                  🗑️ מחק
+                  מחק פנייה
                 </button>
               </div>
             </div>
