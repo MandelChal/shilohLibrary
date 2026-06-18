@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { User, Settings, Calendar, LogOut, Book, ArrowRight, X, Clock, BookOpen, RotateCcw } from "lucide-react";
 
-
 // ייבוא כל הקומפוננטות מקבצים נפרדים
 import LoginScreen from './components/LoginScreen';
 import Navigation from './components/Navigation';
@@ -11,6 +10,7 @@ import NotificationCenter from './components/NotificationCenter';
 import BorrowedBooks from './components/BorrowedBooks';
 import ReturnRequestsManagement from './components/ReturnRequestsManagement';
 import BookCatalog from './components/BookCatalog';
+import ContactSection from './components/ContactSection';
 
 // Utils - תאריכים עבריים
 import {
@@ -104,7 +104,7 @@ const IOSTimePicker = ({ value = '', onChange = () => {}, placeholder = 'בחר 
     }
     
     if (newValue.length >= 3) {
-      // בדיקת הספרה הראשונה של הדקות (0-5)
+      // בדיקת הספרס הראשונה של הדקות (0-5)
       const firstMinuteDigit = parseInt(newValue[2]);
       if (firstMinuteDigit > 5) {
         return; // לא מאפשר ספרה ראשונה של דקות גדולה מ-5
@@ -227,7 +227,6 @@ const IOSTimePicker = ({ value = '', onChange = () => {}, placeholder = 'בחר 
     </div>
   );
 };
-// עד כאן השעון החדש
 
 // האותיות לייצוג ימות השבוע בלוח השנה העברי
 const weekdays = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
@@ -259,7 +258,7 @@ const initialBooks = [
 ];
 
 // ------------------------------------------------------
-// קומפוננטה ראשית - APP מקוצר
+// קומפוננטה ראשית - APP 
 // ------------------------------------------------------
 export default function LibrarySystem() {
   const [user, setUser] = useState(null);
@@ -367,17 +366,14 @@ export default function LibrarySystem() {
     if (!user) return map;
 
     for (const ev of events) {
-      // סינון אירועים - הצג רק אירועים רלוונטיים
       if (ev.isPersonal && ev.userId !== (user.id || user.username)) {
         continue;
       }
 
-      // אירועי מעקב אדמין - רק למנהלים
       if (ev.forAdminsOnly && user.role !== 'admin') {
         continue;
       }
 
-      // אם יש userId ספציפי ולא null - בדוק התאמה
       if (ev.userId && ev.userId !== (user.id || user.username) && user.role !== 'admin') {
         continue;
       }
@@ -408,7 +404,6 @@ export default function LibrarySystem() {
   const monthLabelHeb = fmtHebMonthYear.format(cursor);
   const monthLabelGreg = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(cursor);
 
-  // התחברות משתמש
   const handleLogin = (userData) => {
     try {
       if (!userData || !userData.name) {
@@ -608,7 +603,7 @@ export default function LibrarySystem() {
         {/* תצוגת לוח שנה */}
         {currentView === 'calendar' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* עמודת תוכן/בוקרים */}
+            {/* עמודת תוכן/בלוח */}
             <section className="lg:col-span-2 space-y-6">
               <div className="rounded-3xl overflow-hidden border border-stone-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-8">
                 <h2 className="text-2xl font-semibold mb-2">ברוך הבא {user.name}</h2>
@@ -845,6 +840,9 @@ export default function LibrarySystem() {
             currentUser={user}
           />
         )}
+
+        {/* 📬 טופס יצירת קשר - מופיע רק למשתמשים רגילים ולא לאדמין */}
+        {user.role !== 'admin' && <ContactSection />}
       </main>
 
       {/* פאנל הוספת אירוע */}

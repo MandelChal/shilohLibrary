@@ -1,0 +1,196 @@
+.contact-section {
+  padding: 3rem 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.contact-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  direction: rtl;
+}
+
+/* כשהמסך גדול מספיק - זה יתפצל ל-2 עמודות */
+@media (min-width: 768px) {
+  .contact-container {
+    grid-template-columns: 1fr 1.2fr;
+  }
+}
+
+/* כרטיס פרטים */
+.contact-info-card {
+  background: #f8f6f2; /* צבע קרם/ספרייה עדין ונעים */
+  padding: 2.5rem;
+  border-radius: 24px;
+  border: 1px border #e7e3da;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.info-header h2 {
+  font-size: 1.8rem;
+  color: #292524;
+  margin: 0 0 0.5rem 0;
+}
+
+.info-header p {
+  color: #57534e;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 2rem;
+}
+
+.info-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.info-icon {
+  font-size: 1.5rem;
+  background: white;
+  padding: 0.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.info-item h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: #1c1917;
+}
+
+.info-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #625d52;
+  line-height: 1.4;
+}
+
+/* כרטיס טופס */
+.contact-form-card {
+  background: white;
+  padding: 2.5rem;
+  border-radius: 24px;
+  border: 1px solid #e7e5e4;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.form-header h2 {
+  font-size: 1.8rem;
+  color: #1c1917;
+  margin: 0 0 0.5rem 0;
+}
+
+.form-header p {
+  color: #78716c;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #44403c;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d6d3d1;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  background: #fafaf9;
+  transition: all 0.2s;
+  text-align: right;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.btn-submit {
+  background: #2563eb;
+  color: white;
+  padding: 0.85rem;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: 0.5rem;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-submit:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.submit-message {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.submit-message.success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.submit-message.error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+/* תוסיפי את זה בתחתית קובץ ה-ContactSection.css */
+.info-email-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.info-email-link:hover {
+  text-decoration: underline;
+}
+
+.info-divider {
+  border-top: 1px solid #e7e3da;
+  margin: 0.5rem 0;
+}
+
+.phone-link {
+  direction: ltr;
+  text-align: right;
+}

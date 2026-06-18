@@ -1,0 +1,187 @@
+.admin-messages-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  direction: rtl;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.admin-messages-header {
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e7e5e4;
+  padding-bottom: 1rem;
+}
+
+.admin-messages-header h2 {
+  font-size: 1.8rem;
+  color: #1c1917;
+  margin: 0 0 0.5rem 0;
+}
+
+.admin-messages-header p {
+  color: #6b7280;
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* סידור הכרטיסים ברשת (Grid) */
+.messages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+/* מבנה כרטיס פנייה בודד */
+.message-card {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+}
+
+.message-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* כרטיס שסומן כטופל יקבל רקע אפרפר/ירקרק עדין */
+.message-card.status-treated {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  opacity: 0.85;
+}
+
+/* תג סטטוס פינתי */
+.message-badge {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+}
+
+.status-new .message-badge {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-treated .message-badge {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+/* פרטי השולח */
+.message-info {
+  margin-bottom: 1rem;
+  padding-left: 4rem; /* מניעה מהטקסט לעלות על התג */
+}
+
+.message-info h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.2rem;
+  color: #111827;
+  font-weight: 700;
+}
+
+.message-email {
+  display: inline-block;
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.message-email:hover {
+  text-decoration: underline;
+}
+
+.message-date {
+  display: block;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* גוף הפנייה/ההודעה */
+.message-body {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  flex-grow: 1;
+  border: 1px solid #f1f5f9;
+}
+
+.message-body p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #334155;
+  line-height: 1.5;
+  white-space: pre-wrap; /* שומר על ירידות שורה של המשתמש */
+}
+
+/* אזור כפתורי הפעולה בתחתית */
+.message-actions {
+  display: flex;
+  gap: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1rem;
+}
+
+.btn-action {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  border: none;
+}
+
+/* כפתור סמן כטופל */
+.btn-treat {
+  background: #10b981;
+  color: white;
+}
+
+.btn-treat:hover {
+  background: #059669;
+}
+
+/* כפתור סמן כלא טופל */
+.btn-untreat {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-untreat:hover {
+  background: #4b5563;
+}
+
+/* כפתור מחיקה */
+.btn-delete {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.btn-delete:hover {
+  background: #fca5a5;
+  color: #991b1b;
+}
+
+.no-messages, .admin-loading {
+  text-align: center;
+  padding: 3rem;
+  font-size: 1.1rem;
+  color: #6b7280;
+}
