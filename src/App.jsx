@@ -850,7 +850,7 @@ export default function LibrarySystem() {
       {/* פאנל הוספת אירוע */}
       {panelOpen && user.role === 'admin' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* רקע כהה ומטושטש (מדויק כמו במודאל משתמשים) שסוגר את החלונית בלחיצה עליו */}
+          {/* רקע כהה ומטושטש שסוגר את החלונית בלחיצה עליו */}
           <div 
             className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
             onClick={handleClosePanel}
